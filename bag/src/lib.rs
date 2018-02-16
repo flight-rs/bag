@@ -1,15 +1,24 @@
+#![feature(const_fn)]
+
 extern crate spin;
 pub extern crate failure as fail;
 pub mod bags;
+
+use std::ops::Deref;
 
 pub trait Bag<T: ?Sized>: TryBag<T> {
     fn get(&self) -> &T;
 }
 
-pub trait TryBag<T: ?Sized> {
-    fn try_get(&self) -> Result<&T, &fail::Error>;
+impl<T: ?Sized> AsRef<T> for Bag<T> {
+    fn as_ref(&self) -> &T { self.get() }
 }
 
-impl<B, T> TryBag<T> for B where B: Bag<T> {
-    fn try_get(&self) -> Result<&T, &fail::Error> { Ok(Bag::get(self)) }
+impl<T: ?Sized> Deref for Bag<T> {
+    type Target = T;
+    fn deref(&self) -> &T { self.get() }
+}
+
+pub trait TryBag<T: ?Sized> {
+    fn try_get(&self) -> Result<&T, &fail::Error>;
 }
