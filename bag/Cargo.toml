@@ -1,0 +1,8 @@
+[package]
+name = "bag"
+version = "0.0.0"
+authors = ["me@samsartor.com"]
+
+[dependencies]
+failure = "0.1"
+spin = "0.4"
