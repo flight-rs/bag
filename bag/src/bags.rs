@@ -4,22 +4,12 @@ use std::io::Read;
 use std::fs::File;
 use spin::Once;
 
-pub struct ByteBag<'a>(&'a [u8]);
-impl<'a> Bag<[u8]> for ByteBag<'a> { 
-    fn get(&self) -> &[u8] { self.0 } 
+pub struct RefBag<'a, T: ?Sized + 'a>(pub &'a T);
+impl<'a, T: ?Sized + 'a> Bag<T> for RefBag<'a, T> { 
+    fn get(&self) -> &T { self.0 } 
 }
-impl<'a> TryBag<[u8]> for ByteBag<'a> { 
-    fn try_get(&self) -> Result<&[u8], &fail::Error> {
-        Ok(self.get())
-    }
-}
-
-pub struct StrBag<'a>(&'a str);
-impl<'a> Bag<str> for StrBag<'a> { 
-    fn get(&self) -> &str { self.0 } 
-}
-impl<'a> TryBag<str> for StrBag<'a> { 
-    fn try_get(&self) -> Result<&str, &fail::Error> {
+impl<'a, T: ?Sized + 'a> TryBag<T> for RefBag<'a, T> { 
+    fn try_get(&self) -> Result<&T, &fail::Error> {
         Ok(self.get())
     }
 }
@@ -47,18 +37,18 @@ impl ReadTarget for [u8] {
     }
 }
 
-pub struct FileContentsBag<P: AsRef<Path>, T: ReadTarget> {
+pub struct FileContentsBag<P: AsRef<Path>, T: ReadTarget + ?Sized> {
     pub path: P,
     buf: Once<Result<T::Buf, fail::Error>>,
 }
 
-impl<P: AsRef<Path>, T: ReadTarget> FileContentsBag<P, T> {
+impl<P: AsRef<Path>, T: ReadTarget + ?Sized> FileContentsBag<P, T> {
     pub const fn new(path: P) -> Self {
         FileContentsBag { path, buf: Once::new() }
     }
 }
 
-impl<P: AsRef<Path>, T: ReadTarget> TryBag<T> for FileContentsBag<P, T> {
+impl<P: AsRef<Path>, T: ReadTarget + ?Sized> TryBag<T> for FileContentsBag<P, T> {
     fn try_get(&self) -> Result<&T, &fail::Error> {
         self.buf.call_once(|| T::consume(File::open(&self.path)?))
             .as_ref()
