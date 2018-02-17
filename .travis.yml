@@ -1,0 +1,11 @@
+language: rust
+rust:
+  - stable
+  - nightly
+matrix:
+  allow_failures:
+    - rust: stable
+os:
+- linux
+cache: cargo
+script: ./travis.sh
