@@ -1,75 +1,36 @@
-use ::{Bag, TryBag, fail};
+use ::{Bag, TryBag, Unbag, TryUnbag, fail};
 use std::path::Path;
 use std::io::Read;
 use std::fs::File;
 use std::borrow::Borrow;
-use std::ptr;
-use spin::{Once, Mutex};
+use spin::{Once};
 
-pub struct StaticBag<T: ?Sized>(pub T);
-impl<U: ?Sized, T: ?Sized + Borrow<U>> Bag<U> for StaticBag<T> { 
-    fn get(&self) -> &U { self.0.borrow() } 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct StaticBag<U: ?Sized>(pub U);
+impl<T: ?Sized, U: ?Sized + Borrow<T>> Bag<T> for StaticBag<U> { 
+    fn get(&self) -> &T { self.0.borrow() } 
 }
-impl<U: ?Sized, T: ?Sized + Borrow<U>> TryBag<U> for StaticBag<T> { 
-    fn try_get(&self) -> Result<&U, &fail::Error> {
+impl<T: ?Sized, U: ?Sized + Borrow<T>> TryBag<T> for StaticBag<U> { 
+    fn try_get(&self) -> Result<&T, &fail::Error> {
         Ok(self.get())
     }
 }
+impl<U> Unbag<U> for StaticBag<U> {
+    fn unbag(self) -> U { self.0 }
+}
+impl<U> TryUnbag<U> for StaticBag<U> {
+    fn try_unbag(self) -> Result<U, fail::Error> { Ok(self.0) }
+}
 
-pub struct StaticTryBag<T>(pub Result<T, fail::Error>);
+#[derive(Debug)]
+pub struct StaticTryBag<U>(pub Result<U, fail::Error>);
 impl<U: ?Sized, T: Borrow<U>> TryBag<U> for StaticTryBag<T> { 
     fn try_get(&self) -> Result<&U, &fail::Error> {
         self.0.as_ref().map(Borrow::borrow)
     }
 }
-
-enum LazyState<T, U> {
-    Pre(T),
-    Post(U),
-}
-
-pub struct LazyMapBag<T, U, F: Fn(T) -> U> {
-    state: Mutex<LazyState<(T, F), U>>,
-}
-
-impl<T, U, F: Fn(T) -> U> LazyMapBag<T, U, F> {
-    pub const fn new(data: T, map: F) -> LazyMapBag<T, U, F> {
-        LazyMapBag { 
-            state: Mutex::new(LazyState::Pre((data, map))),
-        }
-    }
-
-    pub fn apply(&self) -> &U {
-        // TODO: This really bloody sucks
-        // remove all unsafeness you idiot
-        
-        let mut state = self.state.lock();
-        let state = &mut *state;
-
-        use self::LazyState::*;
-        unsafe {
-            let pre = match state {
-                &mut Pre(ref c) => Some(ptr::read(c)),
-                _ => None,
-            };
-
-            if let Some((data, map)) = pre {
-                ptr::write(state, Post(map(data)));
-            }
-        }
-        
-        if let &mut Post(ref v) = state { 
-            unsafe { &*(v as *const _) }
-        } else { unreachable!() }
-    }
-}
-
-impl<T, V: ?Sized, U: Bag<V>, F: Fn(T) -> U> Bag<V> for LazyMapBag<T, U, F> {
-    fn get(&self) -> &V { self.apply().get() }
-}
-
-impl<T, V: ?Sized, U: TryBag<V>, F: Fn(T) -> U> TryBag<V> for LazyMapBag<T, U, F> {
-    fn try_get(&self) -> Result<&V, &fail::Error> { self.apply().try_get() }
+impl<U> TryUnbag<U> for StaticTryBag<U> {
+    fn try_unbag(self) -> Result<U, fail::Error> { self.0 }
 }
 
 pub trait ReadTarget {

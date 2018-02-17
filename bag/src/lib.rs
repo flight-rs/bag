@@ -1,4 +1,4 @@
-#![feature(const_fn)]
+#![feature(const_fn, conservative_impl_trait)]
 
 extern crate spin;
 pub extern crate failure as fail;
@@ -21,4 +21,12 @@ impl<T: ?Sized> Deref for Bag<T> {
 
 pub trait TryBag<T: ?Sized> {
     fn try_get(&self) -> Result<&T, &fail::Error>;
+}
+
+pub trait Unbag<T>: Bag<T> + TryUnbag<T> {
+    fn unbag(self) -> T;
+}
+
+pub trait TryUnbag<T>: TryBag<T> {
+    fn try_unbag(self) -> Result<T, fail::Error>;
 }
