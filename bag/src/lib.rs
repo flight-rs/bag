@@ -2,7 +2,9 @@
 
 extern crate spin;
 pub extern crate failure as fail;
+
 pub mod bags;
+pub mod ops;
 
 use std::ops::Deref;
 
@@ -23,10 +25,10 @@ pub trait TryBag<T: ?Sized> {
     fn try_get(&self) -> Result<&T, &fail::Error>;
 }
 
-pub trait Unbag<T>: Bag<T> + TryUnbag<T> {
+pub trait Unbag<T>: TryUnbag<T> {
     fn unbag(self) -> T;
 }
 
-pub trait TryUnbag<T>: TryBag<T> {
+pub trait TryUnbag<T> {
     fn try_unbag(self) -> Result<T, fail::Error>;
 }
