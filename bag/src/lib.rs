@@ -8,7 +8,9 @@ pub mod ops;
 
 use std::ops::Deref;
 
+/// Trait for types that provide access to some data.
 pub trait Bag<T: ?Sized>: TryBag<T> {
+    /// Get an immutable reference to the stored data.
     fn get(&self) -> &T;
 }
 
@@ -21,14 +23,20 @@ impl<T: ?Sized> Deref for Bag<T> {
     fn deref(&self) -> &T { self.get() }
 }
 
+/// Trait for types that might provide access to some data.
 pub trait TryBag<T: ?Sized> {
+    /// Get an immutable reference to the stored data, or an error if the data failed to load.
     fn try_get(&self) -> Result<&T, &fail::Error>;
 }
 
+/// Trait for types that wrap some data.
 pub trait Unbag<T>: TryUnbag<T> {
+    /// Unwrap the stored data.
     fn unbag(self) -> T;
 }
 
+/// Trait for types that might wrap some data.
 pub trait TryUnbag<T> {
+    /// Attempt to unwrap the stored data, or an error if the data failed to load.
     fn try_unbag(self) -> Result<T, fail::Error>;
 }
