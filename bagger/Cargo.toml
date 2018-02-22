@@ -1,0 +1,8 @@
+[package]
+name = "bagger"
+version = "0.0.0"
+authors = ["me@samsartor.com"]
+
+[dependencies]
+quote = "0.4"
+syn = "0.12"

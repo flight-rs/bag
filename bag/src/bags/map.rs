@@ -28,9 +28,9 @@ impl<A, B, F: FnOnce(A) -> B> MapState<A, B, F> {
     }
 
     fn get(mut self) -> B {
-        self.apply();
         match self {
             MapState::Applied { data } => data,
+            MapState::Unapplied { func, data } => func(data),
             _ => unreachable!(),
         }
     }

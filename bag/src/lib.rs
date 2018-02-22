@@ -40,3 +40,17 @@ pub trait TryUnbag<T> {
     /// Attempt to unwrap the stored data, or an error if the data failed to load.
     fn try_unbag(self) -> Result<T, fail::Error>;
 }
+
+/// Trait for types that can be loaded into a `Bag`. Used primarily for
+/// `bag_derive` magic.
+pub trait InitBag: Sized {
+    type Bag: /*Bag<Self> + */Unbag<Self>;
+    fn init() -> Self::Bag;
+}
+
+/// Trait for types that can be loaded into a `TryBag`. Used primarily for
+/// `bag_derive` magic.
+pub trait InitTryBag: Sized {
+    type Bag: /*TryBag<Self> + */TryUnbag<Self>;
+    fn init() -> Self::Bag;
+}
