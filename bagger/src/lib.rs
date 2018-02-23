@@ -2,52 +2,109 @@
 extern crate quote;
 extern crate syn;
 
-use syn::Type;
-use quote::Tokens;
+// prototyping stuff
+mod hacking;
+pub use hacking::*;
 
-pub struct Bagger {
-    
+use std::marker::PhantomData;
+use std::hash::Hash;
+use std::any::TypeId;
+
+#[derive(Hash, PartialEq, Eq)]
+pub enum NodeDesc {
+    Uri,
+    Source(TypeId),
+    Jewel(syn::Type),
 }
 
-impl Bagger {
-    pub fn new() -> Bagger {
-        Bagger { }
+pub trait Node {
+    type Data: ?Sized + 'static;
+
+    fn desc(&self) -> NodeDesc;
+}
+
+pub struct BagUri;
+
+impl Node for BagUri {
+    type Data: str;
+
+    fn desc(&self) -> NodeDesc { NodeDesc::Uri }
+}
+
+pub struct Source<T: ?Sized> {
+    _data: PhantomData<T>,
+}
+
+impl<T: ?Sized> Source<T> {
+    pub fn new() -> Source<T> {
+        Source { _data: PhantomData }
+    }
+}
+
+impl<T: 'static + ?Sized> Node for Source<T> {
+    type Data = T;
+
+    fn desc(&self) -> NodeDesc {
+        NodeDesc::Source(TypeId::of::<T>())
+    }
+}
+
+pub struct Jewel {
+    pub ty: syn::Type,
+}
+
+impl Jewel {
+    pub fn new(ty: syn::Type) -> Jewel {
+        Jewel { ty }
     }
 
-    pub fn bag(&mut self, info: BagInfo) -> BagSolution {
-        assert_eq!(info.cap, BagTrait::TRY_BAG);
-        BagSolution {
-            file_path: info.path,
-            buf_ty: info.ty,
-        }
+    pub fn ty_str(ty: &str) -> Jewel {
+        Jewel { ty: syn::parse_str(ty).unwrap() }
+    }
+
+    pub fn ty_tokens(ty: quote::Tokens) -> Jewel {
+        Jewel { ty: syn::parse(ty.into()).unwrap() }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BagTrait {
-    BAG,
-    TRY_BAG,
+macro_rules! jewel {
+    ($t:ty) => { $crate::Jewel::ty_tokens(quote!{$t}) };
 }
 
-pub struct BagInfo {
-    pub path: String,
-    pub ty: Type,
-    pub cap: BagTrait,
+pub struct JewelGen {
+    pub expr: quote::Tokens,
 }
 
-pub struct BagSolution {
-    file_path: String,
-    buf_ty: Type,
-}
+impl Node for Jewel {
+    type Data = JewelGen;
 
-impl BagSolution {
-    pub fn bag_expr(self) -> Tokens {
-        let BagSolution {
-            file_path,
-            buf_ty,
-        } = self;
-        quote! {
-            ::bag::ops::file_contents::<_, #buf_ty>(#file_path)
-        }
+    fn desc(&self) -> NodeDesc {
+        NodeDesc::Jewel(self.ty.clone())
     }
+}
+
+pub struct EdgeOutput<T: ?Sized> {
+    pub data: Box<T>,
+}
+
+pub fn register<A: Node, B: Node, F>(_: A, _: B, _: F)
+    where F: Fn(&mut Bagger, &A::Data) -> Option<EdgeOutput<B::Data>>
+{
+    unimplemented!()
+}
+
+fn prototype_register() {
+    use std::io::Read;
+
+    register(Source::<Path>::new(), jewel!(&'static [u8]), |_, data|
+        if let Some(path) = data.to_str() {
+            Some(JewelGen { expr: quote!{ include_bytes!(#path) }})
+        } else { None }
+    });
+
+    register(Source::<Path>::new(), jewel!(&'static str), |_, data|
+        if let Some(path) = data.to_str() {
+            Some(JewelGen { expr: quote!{ include_str!(#path) }})
+        } else { None }
+    });
 }

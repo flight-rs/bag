@@ -5,4 +5,4 @@ authors = ["me@samsartor.com"]
 
 [dependencies]
 quote = "0.4"
-syn = "0.12"
+syn =  { version = "0.12", features = ["visit"] }
