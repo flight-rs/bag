@@ -2,7 +2,12 @@
 name = "bagger"
 version = "0.0.0"
 authors = ["me@samsartor.com"]
+build = "build.rs"
 
 [dependencies]
 quote = "0.4"
 syn =  { version = "0.12", features = ["visit"] }
+
+
+[build-dependencies]
+peg = "0.5"

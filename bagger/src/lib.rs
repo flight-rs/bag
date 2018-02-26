@@ -9,6 +9,7 @@ pub use hacking::*;
 use std::marker::PhantomData;
 use std::hash::Hash;
 use std::any::TypeId;
+pub mod uri;
 
 #[derive(Hash, PartialEq, Eq)]
 pub enum NodeDesc {
