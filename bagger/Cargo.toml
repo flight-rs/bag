@@ -6,7 +6,7 @@ build = "build.rs"
 
 [dependencies]
 quote = "0.4"
-syn =  { version = "0.12", features = ["visit"] }
+syn =  { version = "0.12", features = ["visit", "extra-traits"] }
 lazy_static = "1.0"
 failure = "0.1"
 mime = "0.2"

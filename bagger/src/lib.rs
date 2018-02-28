@@ -14,7 +14,6 @@ pub mod solver;
 mod flag;
 pub mod nodes;
 mod builtins;
-//pub mod tyu;
 
 pub use solver::{NodeInput, EdgeBuilder, Solution};
 pub use flag::{Flag, FlagSet, FlagMap};
@@ -56,7 +55,13 @@ impl Bagger {
         where N: Node, F: Fn(NodeInput<N>) + Send + 'static
     {
         let trans = Box::new(solver::FnTransform::new(trans));
-        self.solver.add_transform(trans as Box<solver::TransformInstance>);
+        self.solver.transforms.push(trans as Box<solver::TransformInstance>);
+    }
+
+    pub fn terminal<T>(&mut self, term: T)
+        where T: solver::Terminal + 'static
+    {
+        self.solver.terminals.push(Box::new(term) as _)
     }
 
     #[inline(always)]

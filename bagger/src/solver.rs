@@ -45,32 +45,25 @@ impl PartialOrd for EdgeOrder {
 /// Stores and solves asset transform graph.
 pub struct Solver {
     pub transforms: Vec<Box<TransformInstance>>,
+    pub terminals: Vec<Box<Terminal>>,
 }
 
 impl Solver {
     pub fn new() -> Solver {
+        use nodes::*;
+
         Solver {
             transforms: Vec::new(),
+            terminals: vec![
+                Box::new(EndOnProducer) as _,
+                Box::new(EndOnGenericProducer) as _,
+                Box::new(EndOnTerminate) as _],
         }
-    }
-
-    /// Add a transformation generator.
-    pub fn add_transform(&mut self, t: Box<TransformInstance>) {
-        self.transforms.push(t);
     }
 
     pub fn solve(&self, bag: BagRequest) -> Result<Solution, Error> {
-        fn is_done(&NodeInstance { ref data, .. }: &NodeInstance) -> bool {
-            use self::nodes::*;
-
-            // TODO: check type equality
-            data.is::<Producer>() ||
-            data.is::<GenericProducer>()
-        }
-
         let start = NodeInstance {
             data: Box::new(nodes::Request(bag.uri)) as _,
-            index: 0,
             parent: 0,
             satisfies: FlagSet::new(),
             value: Ok(Box::new(default_val) as _),
@@ -92,7 +85,7 @@ impl Solver {
         }, init_queue);
 
         let mut endpoint = None;
-        loop {
+        'bfs: loop {
             // append all new nodes
             work.nodes.extend(&mut work.new_nodes.drain(..).map(Option::from));
 
@@ -110,9 +103,11 @@ impl Solver {
             // is solved yet?
             {
                 let nodei = get_node(&work.nodes, node);
-                if is_done(nodei) {
-                    endpoint = Some(nodei.index);
-                    break
+                for ter in &self.terminals {
+                    if ter.terminate(&work, nodei) {
+                        endpoint = Some((node, ter));
+                        break 'bfs
+                    }
                 }
             }
 
@@ -122,28 +117,16 @@ impl Solver {
             }
         }
 
-        if let Some(endpoint) = endpoint {
+        if let Some((endpoint, terminal)) = endpoint {
             // missing requirements
             if let Some(missing) = work.required
                 .difference(&get_node(&work.nodes, endpoint).satisfies)
                 .next()
-            { bail!("no find solution with flag \"{}\"", missing)}
+            { bail!("no solution with flag \"{}\"", missing)}
 
-            let bag = work.backtrace(endpoint)?;
-            let bag = match bag.downcast::<<nodes::Producer as Node>::Target>() {
-                Ok(expr) => return Ok(Solution {
-                    bag_expr: *expr,
-                }),
-                Err(v) => v,
-            };
-            let _ = match bag.downcast::<<nodes::GenericProducer as Node>::Target>() {
-                Ok(expr_mk) => return Ok(Solution {
-                    bag_expr: expr_mk(work.target),
-                }),
-                Err(v) => v,
-            };
-            bail!("unknown endpoint");
-        } else { bail!("no solution found (try adding more bagger plugins!)") }
+            let val = work.backtrace(endpoint)?;
+            Ok(terminal.extract(work, val))
+        } else { bail!("no solution (try adding more bagger plugins!)") }
     }
 }
 
@@ -159,8 +142,8 @@ pub struct Working {
     nodes: Vec<Option<NodeInstance>>,
     new_nodes: Vec<NodeInstance>,
     queue: WorkingQueue,
-    target: syn::Type,
-    required: FlagSet,
+    pub target: syn::Type,
+    pub required: FlagSet,
 }
 
 impl Working {
@@ -200,9 +183,7 @@ impl<N, F> TransformInstance for FnTransform<N, F>
     where N: Node, F: Fn(NodeInput<N>) + 'static
 {
     fn apply(&self, working: &mut Working, index: usize) {
-        let data = match get_node(&working.nodes, index).data
-            .downcast_ref::<N>()
-        {
+        let data = match get_node(&working.nodes, index).downcast_ref::<N>() {
             Some(m) => m,
             None => return,
         };
@@ -254,12 +235,30 @@ impl<'work, N: Node> Edges<'work, N> {
     }
 }
 
-struct NodeInstance {
+pub struct NodeInstance {
     data: Box<Any>,
-    index: usize,
     parent: usize,
-    satisfies: FlagSet,
+    pub satisfies: FlagSet,
     value: Result<Box<Fn(Box<Any>) -> Result<Box<Any>, Error>>, Error>,
+}
+
+impl NodeInstance {
+    pub fn downcast_ref<N: Node>(&self) -> Option<&N> {
+        self.data.downcast_ref::<N>()
+    }
+
+    pub fn downcast<N: Node>(self) -> Option<Box<N>> {
+        self.data.downcast::<N>().ok()
+    }
+
+    pub fn is<N: Node>(&self) -> bool {
+        self.data.is::<N>()
+    }
+}
+
+pub trait Terminal {
+    fn terminate(&self, &Working, &NodeInstance) -> bool;
+    fn extract(&self, Working, Box<Any>) -> Solution;
 }
 
 /// Builds an edge between two nodes.
@@ -287,12 +286,12 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
     }
 
     pub fn value<F>(&mut self, eval: F)
-        where F: Fn(&A::Target) -> Result<B::Target, Error> + 'static
+        where F: Fn(A::Target) -> Result<B::Target, Error> + 'static
     {
         self.value = Some(Box::new(move |input|
-            eval(match input.downcast_ref::<A::Target>() {
-                Some(r) => r,
-                None => bail!("could not cast edge")
+            eval(*match input.downcast::<A::Target>() {
+                Ok(r) => r,
+                Err(_) => bail!("could not cast edge")
             }).map(|node| Box::new(node) as Box<Any>)
         ))
     }
@@ -333,7 +332,6 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
         let index = es.nodes.len() + es.new_nodes.len();
         let node = NodeInstance {
             data: Box::new(n),
-            index,
             parent,
             satisfies,
             value,

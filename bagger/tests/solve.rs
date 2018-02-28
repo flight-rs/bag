@@ -11,8 +11,8 @@ use std::str::FromStr;
 pub fn solve_static_str() {
     let mut bggr = Bagger::new();
     let mut req = BagRequest::new(
-        Uri::from_str("file:./tests/hello.txt").unwrap(),
-        parse_quote!([str]));
-    req.required.insert(Flag::new("include"));
+        Uri::from_str("./tests/hello.txt").unwrap(),
+        parse_quote!(str));
+    req.required.insert(Flag::new("static"));
     println!("{:?}", bggr.solve(req))
 }

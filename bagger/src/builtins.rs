@@ -3,8 +3,17 @@ use nodes::*;
 
 use failure::err_msg;
 use syn;
+use mime::Mime;
 
 use std::str::FromStr;
+
+fn is_text(mime: &Mime) -> bool {
+    use mime::TopLevel;
+    match mime {
+        &Mime(TopLevel::Text, ..) => true,
+        _ => false,
+    }
+}
 
 pub fn register_builtins(bggr: &mut Bagger) {
     let static_flag = Flag::new("static");
@@ -31,7 +40,6 @@ pub fn register_builtins(bggr: &mut Bagger) {
         use std::fs::File;
         use std::io::prelude::*;
         use mime_guess::guess_mime_type;
-        use mime::{Mime, TopLevel};
 
         let path = n.node.0.clone();
         
@@ -42,30 +50,23 @@ pub fn register_builtins(bggr: &mut Bagger) {
                 mime = m
             }
         }
-
-        // is file parse-able text?
-        let is_text = match mime {
-            Mime(TopLevel::Text, ..) => true,
-            _ => false,
-        };
-
         // build StrData edge
         let mut text_edge = EdgeBuilder::new();
         // read file
         let text_path = path.clone();
-        text_edge.value(move |&()| {
+        text_edge.value(move |()| {
             let mut string = String::new();
             File::open(&text_path)?.read_to_string(&mut string)?;
             Ok(string)
         });
         // edge does not exist if MIME type is not parseable text
-        if !is_text { text_edge.stop(err_msg("file type is not text")) }
-        n.edges.add(StrData(mime.clone()), text_edge);        
+        if !is_text(&mime) { text_edge.stop(err_msg("file type is not text")) }
+        n.edges.add(StrData(mime.clone()), text_edge);
 
         // build ByteData edge
         let mut bytes_edge = EdgeBuilder::new();
         // read file
-        bytes_edge.value(move |&()| {
+        bytes_edge.value(move |()| {
             let mut bytes = Vec::new();
             File::open(&path)?.read_to_end(&mut bytes)?;
             Ok(bytes)
@@ -76,7 +77,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
     // LocalPath -> Producer<[u8]>, Producer<str>
     bggr.transform(move |mut n: NodeInput<LocalPath>| {
         let path = n.node.0.clone();
-        let flags = &[static_flag, include_flag];
+        let flags = &[include_flag];
 
         let mut bytes_edge = EdgeBuilder::new();
         bytes_edge.satisfies_flags(flags);
@@ -101,5 +102,34 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
         n.edges.add(Producer(bytes_ty.clone()), bytes_edge);
         n.edges.add(Producer(str_ty.clone()), str_edge);
+    });
+
+    // ByteData -> Producer<[u8]>, StrData
+    bggr.transform(move |mut n: NodeInput<ByteData>| {
+        let flags = &[static_flag];
+        let mut edge = EdgeBuilder::new();
+        edge.satisfies_flags(flags);
+        let ty: syn::Type = parse_quote!([u8]);
+        edge.value(move |bytes: Vec<u8>| Ok(quote! {
+            &'static [#(#bytes),*]
+        }));
+        n.edges.add(Producer(ty), edge);
+
+        let mut edge = EdgeBuilder::new();
+        edge.value(|bytes: Vec<u8>| Ok(String::from_utf8(bytes)?));
+        if !is_text(&n.node.0) {
+            edge.stop(err_msg("data type is not text"))
+        }
+         n.edges.add(StrData(n.node.0.clone()), edge);
+    });
+
+    // StrData -> Producer<str>
+    bggr.transform(move |mut n: NodeInput<StrData>| {
+        let flags = &[static_flag];
+        let mut edge = EdgeBuilder::new();
+        edge.satisfies_flags(flags);
+        let ty: syn::Type = parse_quote!(str);
+        edge.value(move |string: String| Ok(quote! { #string }));
+        n.edges.add(Producer(ty.clone()), edge);
     });
 }
