@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::string::FromUtf8Error;
 use std::str::FromStr;
 
 mod parse {

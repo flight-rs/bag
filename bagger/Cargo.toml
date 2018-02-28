@@ -9,6 +9,8 @@ quote = "0.4"
 syn =  { version = "0.12", features = ["visit"] }
 lazy_static = "1.0"
 failure = "0.1"
+mime = "0.2"
+mime_guess = "1.8"
 
 [build-dependencies]
 peg = "0.5"
