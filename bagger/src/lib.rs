@@ -16,7 +16,7 @@ pub mod nodes;
 mod builtins;
 //pub mod tyu;
 
-pub use solver::{NodeInput, EdgeBuilder};
+pub use solver::{NodeInput, EdgeBuilder, Solution};
 pub use flag::{Flag, FlagSet, FlagMap};
 pub use nodes::Node;
 
@@ -25,6 +25,17 @@ pub struct BagRequest {
     pub target: syn::Type,
     pub required: FlagSet,
     pub args: FlagMap<String>,
+}
+
+impl BagRequest {
+    pub fn new(uri: uri::Uri, target: syn::Type) -> BagRequest {
+        BagRequest {
+            uri,
+            target,
+            required: FlagSet::new(),
+            args: FlagMap::new(),
+        }
+    }
 }
 
 pub struct Bagger {
@@ -40,10 +51,16 @@ impl Bagger {
         bggr
     }
 
+    #[inline(always)]
     pub fn transform<N, F>(&mut self, trans: F)
         where N: Node, F: Fn(NodeInput<N>) + Send + 'static
     {
         let trans = Box::new(solver::FnTransform::new(trans));
         self.solver.add_transform(trans as Box<solver::TransformInstance>);
+    }
+
+    #[inline(always)]
+    pub fn solve(&self, bag: BagRequest) -> Result<Solution, failure::Error> {
+        self.solver.solve(bag)
     }
 }

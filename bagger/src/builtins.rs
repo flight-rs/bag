@@ -12,7 +12,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
     // Request -> LocalPath
     bggr.transform(|mut n: NodeInput<Request>| {
-        let uri = &n.meta;
+        let uri = &n.node.0;
         let path = uri.path.clone();
         let mut edge = EdgeBuilder::new();
 
@@ -23,7 +23,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
             _ => edge.stop(err_msg("scheme does not reference the file system")),
         }
 
-        n.edges.add::<LocalPath>(path, edge);
+        n.edges.add(LocalPath(path), edge);
     });
 
     // LocalPath -> StrData, ByteData
@@ -33,7 +33,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
         use mime_guess::guess_mime_type;
         use mime::{Mime, TopLevel};
 
-        let path = n.meta.clone();
+        let path = n.node.0.clone();
         
         // get MIME type of file
         let mut mime = guess_mime_type(&path);
@@ -60,7 +60,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
         });
         // edge does not exist if MIME type is not parseable text
         if !is_text { text_edge.stop(err_msg("file type is not text")) }
-        n.edges.add::<StrData>(mime.clone(), text_edge);        
+        n.edges.add(StrData(mime.clone()), text_edge);        
 
         // build ByteData edge
         let mut bytes_edge = EdgeBuilder::new();
@@ -70,12 +70,12 @@ pub fn register_builtins(bggr: &mut Bagger) {
             File::open(&path)?.read_to_end(&mut bytes)?;
             Ok(bytes)
         });
-        n.edges.add::<ByteData>(mime, bytes_edge);        
+        n.edges.add(ByteData(mime), bytes_edge);        
     });
 
     // LocalPath -> Producer<[u8]>, Producer<str>
     bggr.transform(move |mut n: NodeInput<LocalPath>| {
-        let path = n.meta.clone();
+        let path = n.node.0.clone();
         let flags = &[static_flag, include_flag];
 
         let mut bytes_edge = EdgeBuilder::new();
@@ -99,7 +99,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
             str_edge.stop(err_msg("path not utf-8"));
         }
 
-        n.edges.add::<Producer>(bytes_ty.clone(), bytes_edge);
-        n.edges.add::<Producer>(str_ty.clone(), str_edge);
+        n.edges.add(Producer(bytes_ty.clone()), bytes_edge);
+        n.edges.add(Producer(str_ty.clone()), str_edge);
     });
 }
