@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use std::fmt::{Debug, Display, Formatter, Error as FmtError};
 use std::collections::hash_map::{HashMap, Entry};
+use std::collections::{HashSet};
 
 lazy_static! {
     static ref FLAGS: Mutex<Flags> = Mutex::new(Flags::new());
@@ -63,3 +64,6 @@ impl Debug for Flag {
         self.with_name(|name| write!(f, "Flag {:?}", name))
     }
 }
+
+pub type FlagSet = HashSet<Flag>;
+pub type FlagMap<T> = HashMap<Flag, T>;

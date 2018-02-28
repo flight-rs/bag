@@ -1,5 +1,7 @@
 use uri::Uri;
-use syn::{Expr, Type};
+
+use quote::Tokens;
+use syn::Type;
 use mime::Mime;
 
 use std::path::PathBuf;
@@ -38,12 +40,12 @@ impl Node for StrData {
 
 pub struct Producer;
 impl Node for Producer {
-    type Target = Expr;
+    type Target = Tokens;
     type Meta = Type;
 }
 
 pub struct GenericProducer;
 impl Node for GenericProducer {
-    type Target = Box<Fn(Type) -> Expr>;
+    type Target = Box<Fn(Type) -> Tokens>;
     type Meta = ();
 }

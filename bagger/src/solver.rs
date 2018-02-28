@@ -1,11 +1,12 @@
-use ::Node;
-use flag::Flag;
+use ::{Node, BagRequest, Flag, FlagSet, FlagMap, nodes};
+use uri::Uri;
 
-use syn::Type;
+use syn;
+use quote;
 use failure::Error;
 
-use std::collections::{BTreeMap, VecDeque, HashSet, HashMap};
-use std::any::Any;
+use std::collections::{BTreeMap, VecDeque, HashMap};
+use std::any::{TypeId, Any};
 use std::cmp::{PartialOrd, Ord, Ordering};
 use std::marker::PhantomData;
 
@@ -26,6 +27,10 @@ impl Ord for EdgeOrder {
             .then(self.satisfies.cmp(&other.satisfies))
             .then(self.priority.cmp(&other.priority))
     }
+}
+
+fn default_val(_: &Any) -> Result<Box<Any>, Error> {
+    Ok(Box::new(()) as Box<Any>)
 }
 
 impl PartialOrd for EdgeOrder {
@@ -50,16 +55,72 @@ impl Solver {
     pub fn add_transform(&mut self, t: Box<TransformInstance>) {
         self.transforms.push(t);
     }
+
+    pub fn solve(&self, bag: BagRequest) -> Result<Solution, Error> {
+        fn is_done(n: &NodeInstance) -> Option<usize> {
+            // TODO
+            None
+        }
+
+        let start = NodeInstance {
+            index: 0,
+            parent: 0,
+            satisfies: FlagSet::new(),
+            meta: Box::new(bag.uri) as _,
+            value: Ok(Box::new(default_val) as _),
+        };
+        let mut work = Working {
+            args: bag.args,
+            nodes: vec![start],
+            new_nodes: Vec::new(),
+            queue: WorkingQueue::new(),
+            target: bag.target,
+            required: bag.required,
+        };
+
+        let mut endpoint = None;
+        loop {
+            // append all new nodes
+            work.nodes.append(&mut work.new_nodes);
+
+            // find next node in queue, starting with the highest priority
+            let mut node = None;
+            for (_, q) in work.queue.iter_mut().rev() {
+                node = q.pop_front();
+                if node.is_some() { break };
+            }
+            let node = match node {
+                Some(n) => n,
+                None => break,
+            };
+
+            endpoint = is_done(&work.nodes[node]);
+            if endpoint.is_some() { break }         
+
+            // make next search layer
+            for t in &self.transforms {
+                t.apply(&mut work, node);
+            }
+        }
+
+        // TODO: Backtrace
+        unimplemented!()
+    }
+}
+
+/// How to create a bag for a specific asset.
+pub struct Solution {
+    pub bag_expr: quote::Tokens,
 }
 
 /// Data used during the resolution of a specific asset.
 pub struct Working {
-    pub args: HashMap<Flag, String>,
+    pub args: FlagMap<String>,
     nodes: Vec<NodeInstance>,
     new_nodes: Vec<NodeInstance>,
     queue: WorkingQueue,
-    target: Type,
-    required: HashSet<Flag>,
+    target: syn::Type,
+    required: FlagSet,
 }
 
 type WorkingQueue = BTreeMap<EdgeOrder, VecDeque<usize>>;
@@ -114,7 +175,7 @@ impl<N, F> TransformInstance for FnTransform<N, F>
 
 /// Input node data.
 pub struct NodeInput<'work, N: Node> {
-    pub args: &'work HashMap<Flag, String>,
+    pub args: &'work FlagMap<String>,
     pub meta: &'work N::Meta,
     pub edges: Edges<'work, N>,
 }
@@ -130,7 +191,7 @@ pub struct Edges<'work, N: Node> {
     nodes: &'work [NodeInstance],
     new_nodes: &'work mut Vec<NodeInstance>,
     queue: &'work mut WorkingQueue,
-    required: &'work HashSet<Flag>,
+    required: &'work FlagSet,
     parent: usize,
     _ph: PhantomData<N>,
 }
@@ -145,7 +206,7 @@ impl<'work, N: Node> Edges<'work, N> {
 struct NodeInstance {
     index: usize,
     parent: usize,
-    satisfies: HashSet<Flag>,
+    satisfies: FlagSet,
     meta: Box<Any>,
     value: Result<Box<Fn(&Any) -> Result<Box<Any>, Error>>, Error>,
 }
@@ -153,7 +214,7 @@ struct NodeInstance {
 /// Builds an edge between two nodes.
 pub struct EdgeBuilder<A: Node, B: Node> {
     priority: i32,
-    satis: HashSet<Flag>,
+    satis: FlagSet,
     stops: Option<Error>,
     value: Option<Box<Fn(&Any) -> Result<Box<Any>, Error>>>,
     _ph: PhantomData<(A, B)>,
@@ -163,7 +224,7 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
     pub fn new() -> EdgeBuilder<A, B> {
         EdgeBuilder {
             priority: 0,
-            satis: HashSet::new(),
+            satis: FlagSet::new(),
             stops: None,
             value: None,
             _ph: PhantomData,
@@ -193,21 +254,21 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
         self.satis.insert(flag);
     }
 
+    pub fn satisfies_flags(&mut self, flags: &[Flag]) {
+        self.satis.extend(flags);
+    }
+
     pub fn satisfies(&mut self, flag: &str) {
         self.satisfies_flag(Flag::new(flag))
     }
 
     fn build<N: Node>(self, es: &mut Edges<N>, meta: B::Meta) {
-        fn default_val(_: &Any) -> Result<Box<Any>, Error> {
-            Ok(Box::new(()) as Box<Any>)
-        }
-
         let parent = es.parent;
         let stopped = self.stops.is_some();
         let value = match (self.value, self.stops) {
             (_, Some(e)) => Err(e),
             (Some(f), _) => Ok(f),
-            (None, _) => Ok(Box::new(default_val) as Box<_>),
+            (None, _) => Ok(Box::new(default_val) as _),
         };
 
         let satisfies = {

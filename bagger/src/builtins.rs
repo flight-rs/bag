@@ -1,13 +1,15 @@
-use ::Bagger;
-use ::NodeInput;
-use ::EdgeBuilder;
+use ::{Bagger, NodeInput, EdgeBuilder, Flag};
 use nodes::*;
 
 use failure::err_msg;
+use syn;
 
 use std::str::FromStr;
 
 pub fn register_builtins(bggr: &mut Bagger) {
+    let static_flag = Flag::new("static");
+    let include_flag = Flag::new("include");
+
     // Request -> LocalPath
     bggr.transform(|mut n: NodeInput<Request>| {
         let uri = &n.meta;
@@ -24,7 +26,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
         n.edges.add::<LocalPath>(path, edge);
     });
 
-    // LocalPath -> StrData, BytesData
+    // LocalPath -> StrData, ByteData
     bggr.transform(|mut n: NodeInput<LocalPath>| {
         use std::fs::File;
         use std::io::prelude::*;
@@ -60,7 +62,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
         if !is_text { text_edge.stop(err_msg("file type is not text")) }
         n.edges.add::<StrData>(mime.clone(), text_edge);        
 
-        // build BytesData edge
+        // build ByteData edge
         let mut bytes_edge = EdgeBuilder::new();
         // read file
         bytes_edge.value(move |&()| {
@@ -69,5 +71,35 @@ pub fn register_builtins(bggr: &mut Bagger) {
             Ok(bytes)
         });
         n.edges.add::<ByteData>(mime, bytes_edge);        
+    });
+
+    // LocalPath -> Producer<[u8]>, Producer<str>
+    bggr.transform(move |mut n: NodeInput<LocalPath>| {
+        let path = n.meta.clone();
+        let flags = &[static_flag, include_flag];
+
+        let mut bytes_edge = EdgeBuilder::new();
+        bytes_edge.satisfies_flags(flags);
+        let bytes_ty: syn::Type = parse_quote!([u8]);
+
+        let mut str_edge = EdgeBuilder::new();
+        str_edge.satisfies_flags(flags);
+        let str_ty: syn::Type = parse_quote!(str);
+
+        if let Some(path) = path.to_str().map(ToOwned::to_owned) {
+            let bytes_path = path.clone();
+            bytes_edge.value(move |_| Ok(quote! {
+                ::bag::bags::Static(include_bytes!(#bytes_path))
+            }));
+            str_edge.value(move |_| Ok(quote! {
+                ::bag::bags::Static(include_str!(#path))
+            }));
+        } else {
+            bytes_edge.stop(err_msg("path not utf-8"));
+            str_edge.stop(err_msg("path not utf-8"));
+        }
+
+        n.edges.add::<Producer>(bytes_ty.clone(), bytes_edge);
+        n.edges.add::<Producer>(str_ty.clone(), str_edge);
     });
 }

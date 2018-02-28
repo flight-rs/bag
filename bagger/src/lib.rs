@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate quote;
+#[macro_use]
 extern crate syn;
 #[macro_use]
 extern crate lazy_static;
@@ -10,13 +11,21 @@ extern crate mime_guess;
 
 pub mod uri;
 pub mod solver;
-pub mod flag;
+mod flag;
 pub mod nodes;
 mod builtins;
 //pub mod tyu;
 
 pub use solver::{NodeInput, EdgeBuilder};
+pub use flag::{Flag, FlagSet, FlagMap};
 pub use nodes::Node;
+
+pub struct BagRequest {
+    pub uri: uri::Uri,
+    pub target: syn::Type,
+    pub required: FlagSet,
+    pub args: FlagMap<String>,
+}
 
 pub struct Bagger {
     solver: solver::Solver,
