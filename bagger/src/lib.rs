@@ -8,32 +8,69 @@ extern crate lazy_static;
 extern crate failure;
 extern crate mime;
 extern crate mime_guess;
+extern crate proc_macro2;
 
+pub mod expr;
 pub mod uri;
 pub mod solver;
-mod flag;
+pub mod flag;
 pub mod nodes;
 mod builtins;
 
 pub use solver::{NodeInput, EdgeBuilder, Solution};
-pub use flag::{Flag, FlagSet, FlagMap};
+pub use flag::Flag;
 pub use nodes::Node;
 
+use flag::{FlagMap, FlagSet};
+use uri::Uri;
+use syn::Type;
+use proc_macro2::Span;
+
 pub struct BagRequest {
-    pub uri: uri::Uri,
-    pub target: syn::Type,
+    pub uri: Uri,
+    pub target: Type,
     pub required: FlagSet,
+    pub forbidden: FlagSet,
     pub args: FlagMap<String>,
+    pub span: Span,
 }
 
 impl BagRequest {
-    pub fn new(uri: uri::Uri, target: syn::Type) -> BagRequest {
+    pub fn new(uri: Uri, target: Type) -> BagRequest {
         BagRequest {
             uri,
             target,
             required: FlagSet::new(),
+            forbidden: FlagSet::new(),
             args: FlagMap::new(),
+            span: Span::call_site(),
         }
+    }
+
+    pub fn require_flag(&mut self, flag: Flag) {
+        self.required.insert(flag);
+        self.forbidden.remove(&flag);
+    }
+
+    pub fn require(&mut self, flag: &str) {
+        self.require_flag(Flag::new(flag))
+    }
+
+    pub fn forbid_flag(&mut self, flag: Flag) {
+        self.forbidden.insert(flag);
+        self.required.remove(&flag);
+    }
+
+    pub fn forbid(&mut self, flag: &str) {
+        self.forbid_flag(Flag::new(flag))
+    }
+
+    pub fn arg_flag(&mut self, flag: Flag, val: &str) {
+        self.args.insert(flag, val.to_owned());
+    }
+
+    pub fn arg(&mut self, flag: &str, val: &str) {
+        self.arg_flag(Flag::new(flag), val)
     }
 }
 

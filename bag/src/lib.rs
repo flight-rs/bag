@@ -1,4 +1,16 @@
-#![feature(const_fn, conservative_impl_trait)]
+//! # Bag
+//!
+//! The core of the bag ecosystem is the `bag` crate, which defines the family of
+//! `Bag` traits. A Bag is a run-time object which encapsulates the loading and
+//! storage of some asset data. `Bag` instances can be declared using the `bag!`
+//! macro, which is implemented through the `bag_derive` crate. Build-time reasoning about 
+//! `Bag` declarations is available through the `bagger` crate. Bagger understands
+//! all non-trivial asset types (i.e. images, JSON documents, scripts, dlls)
+//! through plugins (i.e. `bagger_image`, `bagger_json`, `bagger_js`, `bagger_dll`).
+//! Most of these plugins do have a runtime dependency that must also be imported (`image`, `serde_json`, `jsbag`, `sharedlib`). 
+//! Bagger will warn if any of these are missing.
+
+////////////////////////////////////////////////////////////////////////////////
 
 extern crate spin;
 pub extern crate failure as fail;

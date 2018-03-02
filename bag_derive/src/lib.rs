@@ -13,8 +13,6 @@ extern crate bagger;
 #[macro_use]
 extern crate lazy_static;
 
-mod cfg;
-
 use proc_macro::TokenStream;
 use syn::{visit};
 use std::collections::HashMap;
@@ -34,7 +32,7 @@ fn bagger_attr_meta(attr: &syn::Attribute, only: &syn::Ident) -> Option<syn::Met
 #[proc_macro_derive(InitTryBag, attributes(bagger))]
 pub fn derive_init_try_bag(input: TokenStream) -> TokenStream {
     let input: syn::DeriveInput = syn::parse(input).unwrap();    
-    let bggr = cfg::BAGGER.lock();
+    let bggr = Bagger::new();
 
     struct FieldData {
         pub ty: syn::Type,

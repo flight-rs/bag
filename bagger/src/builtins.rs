@@ -1,11 +1,12 @@
 use ::{Bagger, NodeInput, EdgeBuilder, Flag};
 use nodes::*;
+use expr::*;
 
 use failure::err_msg;
-use syn;
 use mime::Mime;
 
 use std::str::FromStr;
+use std::io;
 
 fn is_text(mime: &Mime) -> bool {
     use mime::TopLevel;
@@ -13,6 +14,17 @@ fn is_text(mime: &Mime) -> bool {
         &Mime(TopLevel::Text, ..) => true,
         _ => false,
     }
+}
+
+fn get_mime(node: &NodeInput<LocalPath>) -> Mime {
+    use mime_guess::guess_mime_type;
+
+    if let Some(mime_text) = node.arg("content") {
+        if let Ok(m) = Mime::from_str(mime_text) {
+            return m
+        }
+    }
+    guess_mime_type(&node.node.0)
 }
 
 pub fn register_builtins(bggr: &mut Bagger) {
@@ -35,101 +47,105 @@ pub fn register_builtins(bggr: &mut Bagger) {
         n.edges.add(LocalPath(path), edge);
     });
 
-    // LocalPath -> StrData, ByteData
+    // LocalPath -> LocalRead
     bggr.transform(|mut n: NodeInput<LocalPath>| {
         use std::fs::File;
-        use std::io::prelude::*;
-        use mime_guess::guess_mime_type;
 
+        // build edge
+        let mut edge = EdgeBuilder::new();
+
+        // read file
         let path = n.node.0.clone();
-        
-        // get MIME type of file
-        let mut mime = guess_mime_type(&path);
-        if let Some(mime_text) = n.arg("content") {
-            if let Ok(m) = Mime::from_str(mime_text) {
-                mime = m
-            }
-        }
-        // build StrData edge
-        let mut text_edge = EdgeBuilder::new();
-        // read file
-        let text_path = path.clone();
-        text_edge.value(move |()| {
-            let mut string = String::new();
-            File::open(&text_path)?.read_to_string(&mut string)?;
-            Ok(string)
+        edge.value(move |()| {
+            Ok(Box::new(File::open(&path)?) as _)
         });
-        // edge does not exist if MIME type is not parseable text
-        if !is_text(&mime) { text_edge.stop(err_msg("file type is not text")) }
-        n.edges.add(StrData(mime.clone()), text_edge);
 
-        // build ByteData edge
-        let mut bytes_edge = EdgeBuilder::new();
-        // read file
-        bytes_edge.value(move |()| {
-            let mut bytes = Vec::new();
-            File::open(&path)?.read_to_end(&mut bytes)?;
-            Ok(bytes)
-        });
-        n.edges.add(ByteData(mime), bytes_edge);        
+        // append edge
+        let mime = get_mime(&n);
+        n.edges.add(LocalRead(mime), edge);      
     });
 
     // LocalPath -> Producer<[u8]>, Producer<str>
+    // uses include_*!
     bggr.transform(move |mut n: NodeInput<LocalPath>| {
-        let path = n.node.0.clone();
-        let flags = &[include_flag];
+        let flags = &[static_flag, include_flag];
+        let span = n.span;
 
         let mut bytes_edge = EdgeBuilder::new();
+        let bytes_type = BagType::holds(parse_quote!([u8]));
         bytes_edge.satisfies_flags(flags);
-        let bytes_ty: syn::Type = parse_quote!([u8]);
 
         let mut str_edge = EdgeBuilder::new();
+        let str_type = BagType::holds(parse_quote!(str));
+        if !is_text(&get_mime(&n)) {
+            str_edge.stop(err_msg("file content is not text"));
+        }
         str_edge.satisfies_flags(flags);
-        let str_ty: syn::Type = parse_quote!(str);
 
-        if let Some(path) = path.to_str().map(ToOwned::to_owned) {
+        if let Some(path) = n.node.0.to_str().map(ToOwned::to_owned) {
             let bytes_path = path.clone();
-            bytes_edge.value(move |_| Ok(quote! {
-                ::bag::bags::Static(include_bytes!(#bytes_path))
+            let bytes_type = bytes_type.clone();
+            bytes_edge.value(move |_| Ok(BagExpr {
+                expr: quote_spanned! {
+                    span => ::bag::bags::Static(include_bytes!(#bytes_path))
+                },
+                returns: bytes_type.clone(),
             }));
-            str_edge.value(move |_| Ok(quote! {
-                ::bag::bags::Static(include_str!(#path))
+
+            let str_type = str_type.clone();
+            str_edge.value(move |_| Ok(BagExpr {
+                expr: quote_spanned! { 
+                    span => ::bag::bags::Static(include_str!(#path))
+                },
+                returns: str_type.clone(),
             }));
         } else {
             bytes_edge.stop(err_msg("path not utf-8"));
             str_edge.stop(err_msg("path not utf-8"));
         }
 
-        n.edges.add(Producer(bytes_ty.clone()), bytes_edge);
-        n.edges.add(Producer(str_ty.clone()), str_edge);
+        n.edges.add(Producer(bytes_type), bytes_edge);
+        n.edges.add(Producer(str_type), str_edge);
     });
 
-    // ByteData -> Producer<[u8]>, StrData
-    bggr.transform(move |mut n: NodeInput<ByteData>| {
+    // LocalRead -> Producer<[u8]>, Producer<str>
+    bggr.transform(move |mut n: NodeInput<LocalRead>| {
+        use syn::LitByteStr;
+
         let flags = &[static_flag];
+        let span = n.span;
+
+        // include byte string
         let mut edge = EdgeBuilder::new();
         edge.satisfies_flags(flags);
-        let ty: syn::Type = parse_quote!([u8]);
-        edge.value(move |bytes: Vec<u8>| Ok(quote! {
-            &'static [#(#bytes),*]
-        }));
+        let ty = BagType::holds(parse_quote!([u8]));
+        let returns = ty.clone();
+        edge.value(move |mut read: Box<io::Read>| {
+            let mut bytes = Vec::new();
+            read.read_to_end(&mut bytes)?;
+            let bstr = LitByteStr::new(&bytes, span);
+            Ok(BagExpr {
+                expr: quote_spanned! { span => ::bag::bags::Static(#bstr) },
+                returns: returns.clone(),
+            })
+        });
         n.edges.add(Producer(ty), edge);
 
         let mut edge = EdgeBuilder::new();
-        edge.value(|bytes: Vec<u8>| Ok(String::from_utf8(bytes)?));
-        if !is_text(&n.node.0) {
-            edge.stop(err_msg("data type is not text"))
-        }
-         n.edges.add(StrData(n.node.0.clone()), edge);
-    });
-
-    // StrData -> Producer<str>
-    bggr.transform(move |mut n: NodeInput<StrData>| {
-        let flags = &[static_flag];
-        let mut edge = EdgeBuilder::new();
         edge.satisfies_flags(flags);
-        let ty: syn::Type = parse_quote!(str);
-        edge.value(move |string: String| Ok(quote! { #string }));
-        n.edges.add(Producer(ty.clone()), edge);
+        let ty = BagType::holds(parse_quote!(str));
+        let returns = ty.clone();
+        edge.value(move |mut read: Box<io::Read>| {
+            let mut string = String::new();
+            read.read_to_string(&mut string)?;
+            Ok(BagExpr {
+                expr: quote_spanned! { span => ::bag::bags::Static(#string)},
+                returns: returns.clone(),
+            })
+        });
+        if !is_text(&n.node.0) {
+            edge.stop(err_msg("read content is not text"));
+        }
+        n.edges.add(Producer(ty), edge);
     });
 }

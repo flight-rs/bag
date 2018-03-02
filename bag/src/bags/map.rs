@@ -48,7 +48,7 @@ pub struct LazyMap<A, B, F: FnOnce(A) -> B> {
     state: Mutex<MapState<A, B, F>>,
 }
 impl<A, B, F: FnOnce(A) -> B> LazyMap<A, B, F> {
-    pub const fn new(data: A, func: F) -> Self {
+    pub fn new(data: A, func: F) -> Self {
         LazyMap { state: Mutex::new(MapState::Unapplied { data, func }) }
     }
 }
@@ -82,7 +82,7 @@ pub struct TryLazyMap<A, B, F: FnOnce(A) -> Result<B, fail::Error>> {
     >>,
 }
 impl<A, B, F: FnOnce(A) -> Result<B, fail::Error>> TryLazyMap<A, B, F> {
-    pub const fn new(data: A, func: F) -> Self {
+    pub fn new(data: A, func: F) -> Self {
         TryLazyMap { state: Mutex::new(MapState::Unapplied { data, func }) }
     }
 }

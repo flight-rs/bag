@@ -1,7 +1,9 @@
-use ::{Node, BagRequest, Flag, FlagSet, FlagMap, nodes};
+use ::{Node, BagRequest, Flag, nodes};
+use flag::{FlagMap, FlagSet};
+use expr::BagExpr;
 
+use proc_macro2::Span;
 use syn;
-use quote;
 use failure::Error;
 
 use std::collections::{BTreeMap, VecDeque};
@@ -69,12 +71,14 @@ impl Solver {
             value: Ok(Box::new(default_val) as _),
         };
         let mut work = Working {
+            span: bag.span,
             args: bag.args,
             nodes: vec![Some(start)],
             new_nodes: Vec::new(),
             queue: WorkingQueue::new(),
             target: bag.target,
             required: bag.required,
+            forbidden: bag.forbidden,
         };
         let mut init_queue = VecDeque::new();
         init_queue.push_back(0);
@@ -133,7 +137,7 @@ impl Solver {
 /// How to create a bag for a specific asset.
 #[derive(Debug)]
 pub struct Solution {
-    pub bag_expr: quote::Tokens,
+    pub bag_expr: BagExpr,
 }
 
 /// Data used during the resolution of a specific asset.
@@ -144,6 +148,8 @@ pub struct Working {
     queue: WorkingQueue,
     pub target: syn::Type,
     pub required: FlagSet,
+    pub forbidden: FlagSet,
+    pub span: Span,
 }
 
 impl Working {
@@ -189,6 +195,7 @@ impl<N, F> TransformInstance for FnTransform<N, F>
         };
         
         let node = NodeInput::<N> {
+            span: working.span,
             args: &working.args,
             node: data,
             edges: Edges {
@@ -196,6 +203,7 @@ impl<N, F> TransformInstance for FnTransform<N, F>
                 new_nodes: &mut working.new_nodes,
                 queue: &mut working.queue,
                 required: &working.required,
+                forbidden: &working.forbidden,
                 parent: index,
                 _ph: PhantomData,
             },
@@ -207,6 +215,7 @@ impl<N, F> TransformInstance for FnTransform<N, F>
 
 /// Input node data.
 pub struct NodeInput<'work, N: Node> {
+    pub span: Span,
     pub args: &'work FlagMap<String>,
     pub node: &'work N,
     pub edges: Edges<'work, N>,
@@ -224,6 +233,7 @@ pub struct Edges<'work, N: Node> {
     new_nodes: &'work mut Vec<NodeInstance>,
     queue: &'work mut WorkingQueue,
     required: &'work FlagSet,
+    forbidden: &'work FlagSet,
     parent: usize,
     _ph: PhantomData<N>,
 }
@@ -271,6 +281,7 @@ pub struct EdgeBuilder<A: Node, B: Node> {
 }
 
 impl<A: Node, B: Node> EdgeBuilder<A, B> {
+    /// Create a new edge between nodes.
     pub fn new() -> EdgeBuilder<A, B> {
         EdgeBuilder {
             priority: 0,
@@ -281,6 +292,7 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
         }
     }
 
+    /// For some reason, this edge does not exist between the two nodes.
     pub fn stop(&mut self, err: Error) {
         self.stops = Some(err);
     }
@@ -312,15 +324,25 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
         self.satisfies_flag(Flag::new(flag))
     }
 
-    fn build(self, n: B, es: &mut Edges<A>) {
+    fn build(mut self, n: B, es: &mut Edges<A>) {
+        // stop if forbidden flag
+        if let Some(&f) = es.forbidden
+            .intersection(&self.satis)
+            .next()
+        { self.stop(format_err!("no solution without flag \"{}\"", f)) }
+
+        // some primitive inputs
         let parent = es.parent;
         let stopped = self.stops.is_some();
+
+        // value function
         let value = match (self.value, self.stops) {
             (_, Some(e)) => Err(e),
             (Some(f), _) => Ok(f),
             (None, _) => Ok(Box::new(default_val) as _),
         };
 
+        // build true set of satisfied flags
         let satisfies = {
             let parent = &get_node(&es.nodes, parent);
             let mut all = parent.satisfies.clone();
@@ -329,6 +351,7 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
         };
         let satis_count = satisfies.len() as u32;
 
+        // create new node instace
         let index = es.nodes.len() + es.new_nodes.len();
         let node = NodeInstance {
             data: Box::new(n),
@@ -338,6 +361,7 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
         };
         es.new_nodes.push(node);
 
+        // add to explore queue
         es.queue
             .entry(EdgeOrder {
                 active: !stopped,

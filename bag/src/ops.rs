@@ -4,13 +4,13 @@ use std::path::Path;
 use std::io::Read;
 use std::fs::File;
 
-pub const fn map<A, B, T: Unbag<A>, F: FnOnce(A) -> B>(bag: T, func: F)
+pub fn map<A, B, T: Unbag<A>, F: FnOnce(A) -> B>(bag: T, func: F)
         -> LazyMap<(T, F), B, fn((T, F))->B>
 {
     LazyMap::new((bag, func), |(bag, func)| func(bag.unbag()))
 }
 
-pub const fn try_map<A, B, T: TryUnbag<A>, F: FnOnce(A) -> Result<B, fail::Error>>(bag: T, func: F)
+pub fn try_map<A, B, T: TryUnbag<A>, F: FnOnce(A) -> Result<B, fail::Error>>(bag: T, func: F)
         -> TryLazyMap<(T, F), B, fn((T, F))->Result<B, fail::Error>>
 {
     TryLazyMap::new((bag, func), |(bag, func)| func(bag.try_unbag()?))
@@ -36,7 +36,7 @@ impl ReadTarget for Vec<u8> {
     }
 }
 
-pub const fn file_contents<P, T>(path: P)
+pub fn file_contents<P, T>(path: P)
     -> TryLazyMap<P, T, fn(P) -> Result<T, fail::Error>>
     where P: AsRef<Path>, T: ReadTarget
 {

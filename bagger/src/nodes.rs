@@ -1,17 +1,17 @@
 use uri::Uri;
 use solver::{Terminal, Working, NodeInstance, Solution};
+use expr::{Expr, ExprType, BagExpr, BagType, GenericBagExpr};
 
-use quote::Tokens;
-use syn::Type;
+use syn;
 use mime::Mime;
 
 use std::path::PathBuf;
 use std::any::Any;
+use std::io;
 
 /// Type that defines a node.
 pub trait Node: 'static {
-    // waiting for downcast_ref to allow ?Sized
-    type Target: /*?Sized +*/ 'static;
+    type Target: 'static;
 }
 
 /// The starting node, a basic asset request.
@@ -25,26 +25,41 @@ impl Node for LocalPath {
     type Target = ();
 }
 
-pub struct ByteData(pub Mime);
-impl Node for ByteData {
-    type Target = Vec<u8>;
+pub struct LocalRead(pub Mime);
+impl Node for LocalRead {
+    type Target = Box<io::Read>;
 }
 
-pub struct StrData(pub Mime);
-impl Node for StrData {
-    type Target = String;
+pub struct ReadData(pub Mime);
+impl Node for ReadData {
+    type Target = Expr;
 }
 
-pub struct Producer(pub Type);
+pub struct Data(pub ExprType);
+impl Node for Data {
+    type Target = Expr;
+}
+
+pub struct Producer(pub BagType);
 impl Node for Producer {
-    type Target = Tokens;
+    type Target = BagExpr;
+}
+
+impl Producer {
+    pub fn holds(ty: syn::Type) -> Producer {
+        Producer(BagType::holds(ty))
+    }
+
+    pub fn holds_result(ty: syn::Type) -> Producer {
+        Producer(BagType::holds_result(ty))
+    }
 }
 
 pub struct EndOnProducer;
 impl Terminal for EndOnProducer {
     fn terminate(&self, w: &Working, n: &NodeInstance) -> bool {
         match n.downcast_ref::<Producer>() {
-            Some(&Producer(ref ty)) => ty == &w.target,
+            Some(&Producer(ref ty)) => &ty.contains == &w.target,
             _ => false,
         }
     }
@@ -59,7 +74,7 @@ impl Terminal for EndOnProducer {
 
 pub struct GenericProducer;
 impl Node for GenericProducer {
-    type Target = Box<Fn(Type) -> Tokens>;
+    type Target = Box<GenericBagExpr>;
 }
 
 pub struct EndOnGenericProducer;
@@ -72,7 +87,7 @@ impl Terminal for EndOnGenericProducer {
         Solution { 
             bag_expr: n.downcast::<<GenericProducer as Node>::Target>()
                 .unwrap()
-                (w.target),
+                .eval_to_bag(&w.target),
         }
     }
 }
@@ -80,7 +95,7 @@ impl Terminal for EndOnGenericProducer {
 
 pub struct Terminate;
 impl Node for Terminate {
-    type Target = Tokens;
+    type Target = BagExpr;
 }
 
 pub struct EndOnTerminate;

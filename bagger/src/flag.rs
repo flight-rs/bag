@@ -13,11 +13,24 @@ struct Flags {
 }
 
 impl Flags {
-    fn new() -> Flags {
-        Flags {
+    fn new() -> Flags {      
+        let mut flags = Flags {
             name_to_id: HashMap::new(),
             id_to_name: Vec::new(),
+        };
+
+        unsafe {
+            flags.insert(ARTIFACT, "artifact");
         }
+
+        flags
+    }
+
+    /// DANGER: VERY VERY IMPURE!
+    unsafe fn insert(&mut self, flag: Flag, name: &str) {
+        assert_eq!(self.id_to_name.len(), flag.id);
+        self.id_to_name.push(name.to_owned());
+        self.name_to_id.insert(name.to_owned(), flag.id);
     }
 
     fn intern(&mut self, name: String) -> Flag {
@@ -67,3 +80,5 @@ impl Debug for Flag {
 
 pub type FlagSet = HashSet<Flag>;
 pub type FlagMap<T> = HashMap<Flag, T>;
+
+pub const ARTIFACT: Flag = Flag { id: 0 };
