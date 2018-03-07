@@ -7,13 +7,13 @@ use bag::ops::*;
 extern crate failure;
 use failure::Error;
 
-pub static FILE_TEXT: TryLazyMap<&str, String, fn(&'static str) -> Result<String, Error>> = file_contents("./tests/hello.txt");
 pub static STATIC_TEXT: Static<&str> = Static(HELLO);
 pub const HELLO: &str = "Hello, world!";
 
 #[test]
 fn static_file_text() {
-    assert_eq!(TryBag::<str>::try_get(&FILE_TEXT).unwrap(), HELLO);
+    let file_text = file_contents::<_, String>("./tests/hello.txt");
+    assert_eq!(TryBag::<str>::try_get(&file_text).unwrap(), HELLO);
 }
 
 #[test]

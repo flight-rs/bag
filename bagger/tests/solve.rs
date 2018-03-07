@@ -4,7 +4,7 @@ extern crate syn;
 extern crate quote;
 extern crate bagger;
 
-use bagger::{Bagger, BagRequest, Flag};
+use bagger::{Bagger, BagRequest};
 use bagger::uri::Uri;
 use bagger::expr::BagType;
 
@@ -22,11 +22,14 @@ pub fn solve_static_str() {
     let sol = bggr.solve(req).unwrap();
     assert_eq!(
         sol.bag_expr.expr,
-        quote! { ::bag::bags::Static("Hello, World!\n") },
+        quote! { ::bag::bags::Static::<&'static str>({ "Hello, World!\n" }) },
     );
     assert_eq!(
         sol.bag_expr.returns,
-        BagType::holds(parse_quote!(str)),
+        BagType::holds(
+            parse_quote!(::bag::bags::Static<&'static str>),
+            parse_quote!(str),
+            Some(parse_quote!(&'static str))),
     );
 }
 
@@ -41,11 +44,14 @@ pub fn solve_include_str() {
     let sol = bggr.solve(req).unwrap();
     assert_eq!(
         sol.bag_expr.expr,
-        quote! { ::bag::bags::Static(include_str!("./tests/hello.txt")) },
+        quote! { ::bag::bags::Static::<&'static str>({ include_str!("./tests/hello.txt") }) },
     );
     assert_eq!(
         sol.bag_expr.returns,
-        BagType::holds(parse_quote!(str)),
+        BagType::holds(
+            parse_quote!(::bag::bags::Static<&'static str>),
+            parse_quote!(str),
+            Some(parse_quote!(&'static str))),
     );
 }
 
@@ -60,11 +66,14 @@ pub fn solve_include_bytes() {
     let sol = bggr.solve(req).unwrap();
     assert_eq!(
         sol.bag_expr.expr,
-        quote! { ::bag::bags::Static(include_bytes!("./tests/tiny.png")) },
+        quote! { ::bag::bags::Static::<&'static [u8]>({ include_bytes!("./tests/tiny.png") }) },
     );
     assert_eq!(
         sol.bag_expr.returns,
-        BagType::holds(parse_quote!([u8])),
+        BagType::holds(
+            parse_quote!(::bag::bags::Static<&'static [u8]>),
+            parse_quote!([u8]),
+            Some(parse_quote!(&'static [u8]))),
     );
 }
 

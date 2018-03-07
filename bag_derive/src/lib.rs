@@ -1,24 +1,22 @@
 #![crate_type = "proc-macro"]
-// The `quote!` macro requires deep recursion.
-#![recursion_limit = "256"]
 
 #[macro_use]
 extern crate quote;
-#[macro_use]
 extern crate syn;
 extern crate proc_macro;
 extern crate proc_macro2;
 
 extern crate bagger;
-#[macro_use]
-extern crate lazy_static;
 
 use proc_macro::TokenStream;
 use syn::{visit};
-use std::collections::HashMap;
+use bagger::{Bagger, BagRequest};
+use bagger::uri::Uri;
+
+use std::str::FromStr;
 
 #[proc_macro_derive(InitBag, attributes(bagger))]
-pub fn derive_init_bag(input: TokenStream) -> TokenStream {
+pub fn derive_init_bag(_input: TokenStream) -> TokenStream {
     unimplemented!()
 }
 
@@ -32,18 +30,27 @@ fn bagger_attr_meta(attr: &syn::Attribute, only: &syn::Ident) -> Option<syn::Met
 #[proc_macro_derive(InitTryBag, attributes(bagger))]
 pub fn derive_init_try_bag(input: TokenStream) -> TokenStream {
     let input: syn::DeriveInput = syn::parse(input).unwrap();    
-    let bggr = Bagger::new();
 
     struct FieldData {
         pub ty: syn::Type,
         pub ident: Option<syn::Ident>,
+        pub uri: Option<Uri>,
         pub args: Vec<syn::Lit>,
-        pub kwargs: HashMap<syn::Ident, syn::Lit>, 
+        pub kwargs: Vec<(String, syn::Lit)>, 
     }
 
     impl<'ast> visit::Visit<'ast> for FieldData {
         fn visit_meta_name_value(&mut self, nv: &syn::MetaNameValue) {
-            self.kwargs.insert(nv.ident, nv.lit.clone());
+            let name = nv.ident.as_ref().to_owned();
+            if name.as_str() == "uri" {
+                if let syn::Lit::Str(ref uri) = nv.lit {
+                    self.uri = Some(Uri::from_str(&uri.value())
+                        .expect("URI is not valid"))
+                } else {
+                    panic!("URI decorator is not string")
+                }
+            }
+            self.kwargs.push((name, nv.lit.clone()));
         }
 
         fn visit_lit(&mut self, lit: &syn::Lit) {
@@ -51,33 +58,18 @@ pub fn derive_init_try_bag(input: TokenStream) -> TokenStream {
         }
     }
 
-    enum StructVari {
-        NAMED,
-        UNNAMED,
-        UNIT,
-    }
-
     struct InputData {
-        pub vari: Option<StructVari>,
         pub fds: Vec<FieldData>,
     }
 
     impl<'ast> visit::Visit<'ast> for InputData {
-        fn visit_data_struct(&mut self, item: &syn::DataStruct) {
-            self.vari = Some(match item.fields {
-                syn::Fields::Named(_) => StructVari::NAMED,
-                syn::Fields::Unnamed(_) => StructVari::UNNAMED,
-                syn::Fields::Unit => StructVari::UNIT,
-            });
-            visit::visit_data_struct(self, item);
-        }
-
         fn visit_field(&mut self, field: &syn::Field) {
             let mut fd = FieldData {
                 ty: field.ty.clone(),
                 ident: field.ident,
+                uri: None,
                 args: Vec::new(),
-                kwargs: HashMap::new(),
+                kwargs: Vec::new(),
             };
 
             let bggr_ident = syn::Ident::from("bagger");
@@ -86,24 +78,55 @@ pub fn derive_init_try_bag(input: TokenStream) -> TokenStream {
             {
                 visit::visit_meta(&mut fd, &meta);
             }
+
+            self.fds.push(fd);
         }
     }
 
+    let mut indat = InputData {
+        fds: Vec::new(),
+    };
+    visit::visit_derive_input(&mut indat, &input);
+    let mut fds = indat.fds.into_iter();
+    
+    let contains = fds.next().expect("InitBag derives require at least one field");
+    if fds.next().is_some() {
+        panic!("InitBag derives can use at most one field")
+    }
+
+    let uri = contains.uri.expect("missing field URI decorator");
+    let mut ty = contains.ty;
+    ty = match ty {
+        syn::Type::Reference(r) => *r.elem,
+        t => t,
+    };
+
+    let bggr = Bagger::new();
+    let mut req = BagRequest::new(uri, ty);
+
+    for (key, arg) in contains.kwargs.into_iter().filter_map(|(k, a)| match a {
+        syn::Lit::Str(v) => Some((k, v.value())),
+        _ => None,
+    }) {
+        match key.as_str() {
+            "forbid" =>  req.forbid(&arg),
+            "require" => req.require(&arg),
+            _ => (),
+        }
+    }
+
+    let sol = bggr.solve(req).expect("could not bag");
+
     let ident = input.ident;
-    let tuple_ty = quote! { (::bag::bags::TryStatic<String>,) };
+    let bag_type = sol.bag_expr.returns.full;
+    let inside_type = sol.bag_expr.returns.info.contains;
+    let bag_expr = sol.bag_expr.expr;
+
     let expanded = quote! {
         impl ::bag::InitTryBag for #ident {
-            type Bag = ::bag::bags::TryLazyMap<#tuple_ty, Self, fn(#tuple_ty) -> Result<Self, ::bag::fail::Error>>;
-            fn init() -> Self::Bag {
-                use ::bag::TryUnbag;
-                ::bag::bags::TryLazyMap::new((
-                    ::bag::bags::TryStatic(Ok("hello".to_owned())),
-                ), |init| {
-                    Ok(#ident {
-                        test: init.0.try_unbag()?,
-                    })
-                })
-            }
+            type Inside = #inside_type;
+            type Bag = #bag_type;
+            fn init() -> Self::Bag { #bag_expr }
         }
     };
 

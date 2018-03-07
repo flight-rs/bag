@@ -53,16 +53,18 @@ pub trait TryUnbag<T> {
     fn try_unbag(self) -> Result<T, fail::Error>;
 }
 
-/// Trait for types that can be loaded into a `Bag`. Used primarily for
-/// `bag_derive` magic.
-pub trait InitBag: Sized {
-    type Bag: /*Bag<Self> + */Unbag<Self>;
+/// Trait for types that can instantiate a `Bag`. Used primarily for
+/// `bag_derive` macro magic.
+pub trait InitBag {
+    type Inside: ?Sized;
+    type Bag: Bag<Self::Inside>;
     fn init() -> Self::Bag;
 }
 
-/// Trait for types that can be loaded into a `TryBag`. Used primarily for
-/// `bag_derive` magic.
-pub trait InitTryBag: Sized {
-    type Bag: /*TryBag<Self> + */TryUnbag<Self>;
+/// Trait for types that can instantiate a `TryBag`. Used primarily for
+/// `bag_derive` macro magic.
+pub trait InitTryBag {
+    type Inside: ?Sized;
+    type Bag: TryBag<Self::Inside>;
     fn init() -> Self::Bag;
 }

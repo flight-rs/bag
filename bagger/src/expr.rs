@@ -8,29 +8,57 @@ pub enum BagForm {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BagType {
+pub struct BagInfo {
     pub form: BagForm,
     pub canfail: bool,
     pub unbag: Option<Type>,
     pub contains: Type,
 }
 
-impl BagType {
-    pub fn holds(ty: Type) -> BagType {
-        BagType {
+impl BagInfo {
+    pub fn holds(view: Type, unbag: Option<Type>) -> BagInfo {
+        BagInfo {
             form: BagForm::Simple,
             canfail: false, 
-            unbag: Some(ty.clone()),
-            contains: ty.clone(),
+            unbag: unbag,
+            contains: view,
         }
     }
 
-    pub fn holds_result(ty: Type) -> BagType {
-        BagType {
+    pub fn holds_result(view: Type, unbag: Option<Type>) -> BagInfo {
+        BagInfo {
             form: BagForm::Simple,
             canfail: true, 
-            unbag: Some(ty.clone()),
-            contains: ty.clone(),
+            unbag: unbag,
+            contains: view,
+        }
+    }
+
+    pub fn satisfies(&self, other: &BagInfo) -> bool {
+           self.form == other.form
+        && self.canfail == other.canfail
+        && (other.unbag.is_none() || self.unbag == other.unbag)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BagType {
+    pub full: Type,
+    pub info: BagInfo,
+}
+
+impl BagType {
+    pub fn holds(full: Type, view: Type, unbag: Option<Type>) -> BagType {
+        BagType {
+            full,
+            info: BagInfo::holds(view, unbag),
+        }
+    }
+
+    pub fn holds_result(full: Type, view: Type, unbag: Option<Type>) -> BagType {
+        BagType {
+            full,
+            info: BagInfo::holds_result(view, unbag),
         }
     }
 }
@@ -92,14 +120,13 @@ impl Expr {
         }
     }
 
-    pub fn bag_static(self) -> BagExpr {
+    pub fn bag_static(self, view: Type) -> BagExpr {
         let FlatExpr { 
             expr,
             returns: ExprType { 
                 ok_type, 
                 is_result,
         } } = self.flatten();
-        let contains = ok_type.clone();
         let unbag = Some(ok_type.clone());
 
         BagExpr {
@@ -109,10 +136,17 @@ impl Expr {
                 quote!( ::bag::bags::Static::<#ok_type>(#expr) )
             },
             returns: BagType {
-                form: BagForm::Simple,
-                canfail: is_result,
-                unbag,
-                contains,
+                full: if is_result {
+                    parse_quote!( ::bag::bags::TryStatic<#ok_type> )
+                } else {
+                    parse_quote!( ::bag::bags::Static<#ok_type> )
+                },
+                info: BagInfo {
+                    form: BagForm::Simple,
+                    canfail: is_result,
+                    unbag,
+                    contains: view,
+                },
             },
         }
     }
@@ -129,6 +163,7 @@ impl Expr {
         let contains = self.returns.ok_type.clone();
         let unbag = Some(self.returns.ok_type.clone());
 
+        let a_type = quote! { (#(#input_types,)*) };
         let b_type = self.returns.ok_type;
         let b_expr = self.expr;
 
@@ -140,16 +175,29 @@ impl Expr {
 
         BagExpr {
             expr: quote! {
-                ::bag::bags::#bag_name::<(#(#input_types,)*), #b_type, _>::new(
+                ::bag::bags::#bag_name::<
+                    #a_type,
+                    #b_type,
+                    fn(#a_type) -> #b_type
+                >::new(
                     (#(#input_exprs,)*),
                     |(#(#input_names,)*)| #b_expr
                 )
             },
             returns: BagType {
-                form: BagForm::Simple,
-                canfail,
-                unbag,
-                contains,
+                full: parse_quote! {
+                    ::bag::bags::#bag_name<
+                        #a_type,
+                        #b_type,
+                        fn(#a_type) -> #b_type
+                    >
+                },
+                info: BagInfo {
+                    form: BagForm::Simple,
+                    canfail,
+                    unbag,
+                    contains,
+                }
             },
         }
     }

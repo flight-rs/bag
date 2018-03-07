@@ -1,8 +1,7 @@
 use uri::Uri;
 use solver::{Terminal, Working, NodeInstance, Solution};
-use expr::{Expr, ExprType, BagExpr, BagType, GenericBagExpr};
+use expr::{Expr, ExprType, BagInfo, BagExpr, GenericBagExpr};
 
-use syn;
 use mime::Mime;
 
 use std::path::PathBuf;
@@ -40,19 +39,19 @@ impl Node for Data {
     type Target = Expr;
 }
 
-pub struct Producer(pub BagType);
+pub struct Producer(pub BagInfo);
 impl Node for Producer {
     type Target = BagExpr;
 }
 
 impl Producer {
-    pub fn holds(ty: syn::Type) -> Producer {
-        Producer(BagType::holds(ty))
-    }
+    // pub fn holds(ty: syn::Type) -> Producer {
+    //     Producer(BagInfo::holds(ty))
+    // }
 
-    pub fn holds_result(ty: syn::Type) -> Producer {
-        Producer(BagType::holds_result(ty))
-    }
+    // pub fn holds_result(ty: syn::Type) -> Producer {
+    //     Producer(BagInfo::holds_result(ty))
+    // }
 }
 
 pub struct EndOnProducer;

@@ -6,10 +6,12 @@ use bag::{InitTryBag, TryBag};
 
 #[derive(InitTryBag)]
 pub struct TestInit {
-    #[bagger(path="test.txt")]
-    pub test: String,
+    #[bagger(uri="test.txt")]
+    #[bagger(require="include")]
+    pub test: str,
 }
 
 fn main() {
-    println!("{}", &TestInit::init().try_get().unwrap().test);
+    let bag = TestInit::init();
+    println!("{}", TryBag::<str>::try_get(&bag).unwrap());
 }

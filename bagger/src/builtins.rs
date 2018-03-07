@@ -71,12 +71,16 @@ pub fn register_builtins(bggr: &mut Bagger) {
         let flags = &[static_flag, include_flag];
         let span = n.span;
 
+        let bytes_expr_type = ExprType::of(parse_quote!(&'static [u8]));
+        let bytes_info = BagInfo::holds(parse_quote!([u8]), Some(bytes_expr_type.ok_type.clone()));
+
         let mut bytes_edge = EdgeBuilder::new();
-        let bytes_type = BagType::holds(parse_quote!([u8]));
         bytes_edge.satisfies_flags(flags);
 
+        let str_expr_type = ExprType::of(parse_quote!(&'static str));
+        let str_info = BagInfo::holds(parse_quote!(str), Some(str_expr_type.ok_type.clone()));
+
         let mut str_edge = EdgeBuilder::new();
-        let str_type = BagType::holds(parse_quote!(str));
         if !is_text(&get_mime(&n)) {
             str_edge.stop(err_msg("file content is not text"));
         }
@@ -84,28 +88,24 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
         if let Some(path) = n.node.0.to_str().map(ToOwned::to_owned) {
             let bytes_path = path.clone();
-            let bytes_type = bytes_type.clone();
-            bytes_edge.value(move |_| Ok(BagExpr {
-                expr: quote_spanned! {
-                    span => ::bag::bags::Static(include_bytes!(#bytes_path))
-                },
-                returns: bytes_type.clone(),
-            }));
+            let bytes_contains = bytes_info.contains.clone();
+            bytes_edge.value(move |_| Ok(Expr::from_quote(
+                quote_spanned! { span => include_bytes!(#bytes_path) },
+                bytes_expr_type.clone(),
+            ).bag_static(bytes_contains.clone())));
 
-            let str_type = str_type.clone();
-            str_edge.value(move |_| Ok(BagExpr {
-                expr: quote_spanned! { 
-                    span => ::bag::bags::Static(include_str!(#path))
-                },
-                returns: str_type.clone(),
-            }));
+            let str_contains = str_info.contains.clone();
+            str_edge.value(move |_| Ok(Expr::from_quote(
+                quote_spanned! { span => include_str!(#path) },
+                str_expr_type.clone(),
+            ).bag_static(str_contains.clone())));
         } else {
             bytes_edge.stop(err_msg("path not utf-8"));
             str_edge.stop(err_msg("path not utf-8"));
         }
 
-        n.edges.add(Producer(bytes_type), bytes_edge);
-        n.edges.add(Producer(str_type), str_edge);
+        n.edges.add(Producer(bytes_info), bytes_edge);
+        n.edges.add(Producer(str_info), str_edge);
     });
 
     // LocalRead -> Producer<[u8]>, Producer<str>
@@ -115,37 +115,40 @@ pub fn register_builtins(bggr: &mut Bagger) {
         let flags = &[static_flag];
         let span = n.span;
 
+        let bytes_expr_type = ExprType::of(parse_quote!(&'static [u8]));
+        let bytes_info = BagInfo::holds(parse_quote!([u8]), Some(bytes_expr_type.ok_type.clone()));
+
         // include byte string
         let mut edge = EdgeBuilder::new();
         edge.satisfies_flags(flags);
-        let ty = BagType::holds(parse_quote!([u8]));
-        let returns = ty.clone();
+        let bytes_contains = bytes_info.contains.clone();
         edge.value(move |mut read: Box<io::Read>| {
             let mut bytes = Vec::new();
             read.read_to_end(&mut bytes)?;
-            let bstr = LitByteStr::new(&bytes, span);
-            Ok(BagExpr {
-                expr: quote_spanned! { span => ::bag::bags::Static(#bstr) },
-                returns: returns.clone(),
-            })
+            Ok(Expr::from_quote(
+                LitByteStr::new(&bytes, span),
+                bytes_expr_type.clone(),
+            ).bag_static(bytes_contains.clone()))
         });
-        n.edges.add(Producer(ty), edge);
+        n.edges.add(Producer(bytes_info), edge);
+
+        let str_expr_type = ExprType::of(parse_quote!(&'static str));
+        let str_info = BagInfo::holds(parse_quote!(str), Some(str_expr_type.ok_type.clone()));
 
         let mut edge = EdgeBuilder::new();
         edge.satisfies_flags(flags);
-        let ty = BagType::holds(parse_quote!(str));
-        let returns = ty.clone();
+        let str_contains = str_info.contains.clone();
         edge.value(move |mut read: Box<io::Read>| {
             let mut string = String::new();
             read.read_to_string(&mut string)?;
-            Ok(BagExpr {
-                expr: quote_spanned! { span => ::bag::bags::Static(#string)},
-                returns: returns.clone(),
-            })
+            Ok(Expr::from_quote(
+                string,
+                str_expr_type.clone(),
+            ).bag_static(str_contains.clone()))
         });
         if !is_text(&n.node.0) {
             edge.stop(err_msg("read content is not text"));
         }
-        n.edges.add(Producer(ty), edge);
+        n.edges.add(Producer(str_info), edge);
     });
 }
