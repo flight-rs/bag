@@ -12,28 +12,49 @@ use bagger::Uri;
 use bagger::flag::{Flag, FlagSet, FlagMap};
 use bagger::expr::BagInfo;
 
-use proc_macro2::Span;
-use proc_macro::TokenStream;
-use syn::visit::{self, Visit};
+use proc_macro2::{TokenStream, TokenNode, Span};
+use proc_macro::TokenStream as TokenStream1;
 
 use std::str::FromStr;
 
-fn bagger_attr_meta(attr: &syn::Attribute, only: &syn::Ident) -> Option<syn::Meta> {
-    match attr.interpret_meta() {
-        Some(meta) => if meta.name() == only { Some(meta) } else { None },
-        _ => None,
-    }
-}
-
 #[proc_macro_derive(InitBag, attributes(bagger))]
-pub fn derive_init_try_bag(input: TokenStream) -> TokenStream {
-    let input: syn::DeriveInput = syn::parse(input).unwrap();  
+pub fn derive_init_try_bag(input: TokenStream1) -> TokenStream1 {
+    let input: syn::DeriveInput = syn::parse(input).unwrap();
 
-    fn lit_str(lit: &syn::Lit) -> String {
-        match *lit {
-            syn::Lit::Str(ref s) => s.value(),
-            _ => panic!("literal is not a string"),
+    fn tks_to_uri(tks: TokenStream) -> Uri {
+        match syn::parse2::<syn::Lit>(tks).expect("URI not a literal") {
+            syn::Lit::Str(s) => Uri::from_str(&s.value()).expect("URI is not valid"),
+            _ => panic!("URI is not a string expression"),
         }
+    }
+
+    fn tks_to_target(tks: TokenStream) -> BagInfo {
+        let syntax_err = "target is not a plus-deliniated list of traits";
+        BagInfo::from_quote(syn::parse2::<syn::Type>(tks).
+            expect(syntax_err))
+            .expect("target is not understood")
+            
+    }
+
+    fn tks_to_flag(tks: TokenStream) -> Flag {
+        Flag::from_str(syn::parse2::<syn::Ident>(tks)
+            .expect("flag is not an ident")
+            .as_ref())
+    }
+
+    fn tks_to_value(tks: TokenStream) -> String {
+        match syn::parse2::<syn::Lit>(tks).expect("value not a literal") {
+            syn::Lit::Str(s) => s.value(),
+            _ => panic!("value is not a string expression"),
+        }
+    }
+
+    fn is_path_bagger(p: syn::Path) -> bool {
+        let mut segs = p.segments.into_iter();
+        (match segs.next() {
+            Some(s) => s.ident.as_ref() == "bagger",
+            None => false,
+        }) && segs.next().is_none()
     }
 
     struct Metadata {
@@ -44,20 +65,30 @@ pub fn derive_init_try_bag(input: TokenStream) -> TokenStream {
         pub args: FlagMap<String>,
     }
 
-    impl<'ast> Visit<'ast> for Metadata {
-        fn visit_meta_name_value(&mut self, nv: &syn::MetaNameValue) {
-            let name = nv.ident.as_ref().to_owned();
-            let lit = &nv.lit;
+    impl Metadata {
+        fn tts(&mut self, tok: TokenStream) {
+            let mut ts = tok.into_iter();
+            let com = match ts.next().expect("bagger command not given").kind {
+                TokenNode::Term(term) => term.as_str().to_owned(),
+                _ => panic!("bagger command is not an ident"),
+            };
+            let mut args = ts.map(|data| match data.kind {
+                TokenNode::Group(_, tts) => tts,
+                _ => panic!("bagger argument is not a group"),
+            });
 
-            match name.as_str() {
-                "uri" => self.uri = Some(Uri::from_str(&lit_str(lit))
-                    .expect("URI is not valid")),
-                "target" => self.target = Some(BagInfo::from_quote(
-                    syn::parse_str(&lit_str(lit)).expect("target is not valid")
-                ).expect("could not parse target")),
-                "require" => { self.require.insert(Flag::new(lit_str(lit))); },
-                "forbid" => { self.forbid.insert(Flag::new(lit_str(lit))); },
-                n => panic!("unknown bagger input \"{}\"", n),
+            let arg1 = args.next().expect("must provide at least one argument");
+
+            match com.as_str() {
+                "uri" => self.uri = Some(tks_to_uri(arg1)),
+                "target" => self.target = Some(tks_to_target(arg1)),
+                "require" => { self.require.insert(tks_to_flag(arg1)); },
+                "forbid" => { self.forbid.insert(tks_to_flag(arg1)); },
+                "arg" => { self.args.insert(
+                    tks_to_flag(arg1),
+                    tks_to_value(args.next().expect("arg command takes two params"))
+                ); },
+                n => panic!("unknown bagger command \"{}\"", n),
             }
         }
     }
@@ -70,9 +101,10 @@ pub fn derive_init_try_bag(input: TokenStream) -> TokenStream {
         args: FlagMap::new(),
     };
 
-    let bagger_ident = syn::Ident::from("bagger");
-    for m in input.attrs.iter().filter_map(|a| bagger_attr_meta(a, &bagger_ident)) {
-        visit::visit_meta(&mut meta, &m);
+    for attr in input.attrs.into_iter() {
+        if is_path_bagger(attr.path) {
+            meta.tts(attr.tts);
+        }
     }
 
     let req = BagRequest {

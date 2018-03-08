@@ -4,9 +4,7 @@ extern crate syn;
 extern crate quote;
 extern crate bagger;
 
-use bagger::{Bagger, BagRequest};
-use bagger::uri::Uri;
-use bagger::expr::BagType;
+use bagger::{Bagger, BagRequest, Uri, BagInfo};
 
 use std::str::FromStr;
 
@@ -15,7 +13,7 @@ pub fn solve_static_str() {
     let bggr = Bagger::new();
     let mut req = BagRequest::new(
         Uri::from_str("./tests/hello.txt").unwrap(),
-        parse_quote!(str));
+        BagInfo::from_quote(parse_quote!(Bag<str>)).unwrap());
     req.require("static");
     req.forbid("include");
 
@@ -26,10 +24,7 @@ pub fn solve_static_str() {
     );
     assert_eq!(
         sol.bag_expr.returns,
-        BagType::holds(
-            parse_quote!(::bag::bags::Static<&'static str>),
-            parse_quote!(str),
-            Some(parse_quote!(&'static str))),
+        parse_quote!(::bag::bags::Static<&'static str>),
     );
 }
 
@@ -38,7 +33,7 @@ pub fn solve_include_str() {
     let bggr = Bagger::new();
     let mut req = BagRequest::new(
         Uri::from_str("./tests/hello.txt").unwrap(),
-        parse_quote!(str));
+        BagInfo::from_quote(parse_quote!(Bag<str>)).unwrap());
     req.require("include");
 
     let sol = bggr.solve(req).unwrap();
@@ -48,10 +43,7 @@ pub fn solve_include_str() {
     );
     assert_eq!(
         sol.bag_expr.returns,
-        BagType::holds(
-            parse_quote!(::bag::bags::Static<&'static str>),
-            parse_quote!(str),
-            Some(parse_quote!(&'static str))),
+        parse_quote!(::bag::bags::Static<&'static str>),
     );
 }
 
@@ -60,7 +52,7 @@ pub fn solve_include_bytes() {
     let bggr = Bagger::new();
     let mut req = BagRequest::new(
         Uri::from_str("./tests/tiny.png").unwrap(),
-        parse_quote!([u8]));
+        BagInfo::from_quote(parse_quote!(Bag<[u8]>)).unwrap());
     req.require("include");
 
     let sol = bggr.solve(req).unwrap();
@@ -70,17 +62,14 @@ pub fn solve_include_bytes() {
     );
     assert_eq!(
         sol.bag_expr.returns,
-        BagType::holds(
-            parse_quote!(::bag::bags::Static<&'static [u8]>),
-            parse_quote!([u8]),
-            Some(parse_quote!(&'static [u8]))),
+        parse_quote!(::bag::bags::Static<&'static [u8]>),
     );
 }
 
 #[test]
 pub fn solve_static_png_as_str() {
     let bggr = Bagger::new();
-    let ty: syn::Type = parse_quote!(str);
+    let ty = BagInfo::simple(parse_quote!(str), None);
     let uri = Uri::from_str("./tests/tiny.png").unwrap();
 
     let mut req = BagRequest::new(uri.clone(), ty.clone());
@@ -100,7 +89,7 @@ pub fn solve_static_png_as_str() {
 #[test]
 pub fn solve_include_png_as_str() {
     let bggr = Bagger::new();
-    let ty: syn::Type = parse_quote!(str);
+    let ty = BagInfo::simple(parse_quote!(str), None);
     let uri = Uri::from_str("./tests/tiny.png").unwrap();
 
     let mut req = BagRequest::new(uri.clone(), ty.clone());

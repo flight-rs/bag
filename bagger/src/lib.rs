@@ -21,9 +21,9 @@ pub use solver::{NodeInput, EdgeBuilder, Solution};
 pub use flag::Flag;
 pub use nodes::Node;
 pub use uri::Uri;
+pub use expr::BagInfo;
 
 use flag::{FlagMap, FlagSet};
-use expr::BagInfo;
 use proc_macro2::Span;
 
 pub struct BagRequest {

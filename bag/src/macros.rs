@@ -2,10 +2,11 @@
 macro_rules! bag {
     ($(+$r:ident)* $(?$f:ident)* $(%$a:ident=($e:expr))* $name:expr => $traits:ty) => {
         bag_internal!(
-            [target $traits]
-            [uri $name]
-            $([require $r])*
-            $([forbid $f])*
+            [target ($traits)]
+            [uri ($name)]
+            $([require ($r)])*
+            $([forbid ($f)])*
+            $([arg ($a) ($e)])*
         )
     }
 }
@@ -14,7 +15,7 @@ macro_rules! bag {
 macro_rules! bag_internal {
     ($([$($v:tt)+])*) => {{
         #[derive(InitBag)]
-        $(#[bagger($($v)*)])*
+        $(#[bagger $($v)*])*
         struct MkBag;
         
         #[allow(deprecated)]

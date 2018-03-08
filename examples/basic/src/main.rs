@@ -6,6 +6,6 @@ extern crate bag;
 use bag::Bag;
 
 fn main() {
-    let bag = bag!(+include "text.txt" => Unbag<String>);
+    let bag = bag!(+include "test.txt" => Unbag<String>);
     println!("{}", Bag::<str>::try_get(&bag).unwrap());
 }
