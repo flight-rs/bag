@@ -53,8 +53,12 @@ pub struct Flag {
 }
 
 impl Flag {
-    pub fn new(name: &str) -> Flag {
-        FLAGS.lock().unwrap().intern(name.to_owned())
+    pub fn new(name: String) -> Flag {
+        FLAGS.lock().unwrap().intern(name)
+    }
+
+    pub fn from_str(name: &str) -> Flag {
+        Flag::new(name.to_owned())
     }
 
     pub fn name(&self) -> String {

@@ -28,8 +28,8 @@ fn get_mime(node: &NodeInput<LocalPath>) -> Mime {
 }
 
 pub fn register_builtins(bggr: &mut Bagger) {
-    let static_flag = Flag::new("static");
-    let include_flag = Flag::new("include");
+    let static_flag = Flag::from_str("static");
+    let include_flag = Flag::from_str("include");
 
     // Request -> LocalPath
     bggr.transform(|mut n: NodeInput<Request>| {
@@ -72,13 +72,17 @@ pub fn register_builtins(bggr: &mut Bagger) {
         let span = n.span;
 
         let bytes_expr_type = ExprType::of(parse_quote!(&'static [u8]));
-        let bytes_info = BagInfo::holds(parse_quote!([u8]), Some(bytes_expr_type.ok_type.clone()));
+        let bytes_info = BagInfo::from_quote(parse_quote!(
+            Bag<[u8]> + Unbag<&'static [u8]> + Unbag<Vec<u8>>
+        )).unwrap();
 
         let mut bytes_edge = EdgeBuilder::new();
         bytes_edge.satisfies_flags(flags);
 
         let str_expr_type = ExprType::of(parse_quote!(&'static str));
-        let str_info = BagInfo::holds(parse_quote!(str), Some(str_expr_type.ok_type.clone()));
+        let str_info = BagInfo::from_quote(parse_quote!(
+            Bag<str> + Unbag<&'static str> + Unbag<String>
+        )).unwrap();
 
         let mut str_edge = EdgeBuilder::new();
         if !is_text(&get_mime(&n)) {
@@ -88,17 +92,15 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
         if let Some(path) = n.node.0.to_str().map(ToOwned::to_owned) {
             let bytes_path = path.clone();
-            let bytes_contains = bytes_info.contains.clone();
             bytes_edge.value(move |_| Ok(Expr::from_quote(
                 quote_spanned! { span => include_bytes!(#bytes_path) },
                 bytes_expr_type.clone(),
-            ).bag_static(bytes_contains.clone())));
+            ).bag_static()));
 
-            let str_contains = str_info.contains.clone();
             str_edge.value(move |_| Ok(Expr::from_quote(
                 quote_spanned! { span => include_str!(#path) },
                 str_expr_type.clone(),
-            ).bag_static(str_contains.clone())));
+            ).bag_static()));
         } else {
             bytes_edge.stop(err_msg("path not utf-8"));
             str_edge.stop(err_msg("path not utf-8"));
@@ -116,35 +118,37 @@ pub fn register_builtins(bggr: &mut Bagger) {
         let span = n.span;
 
         let bytes_expr_type = ExprType::of(parse_quote!(&'static [u8]));
-        let bytes_info = BagInfo::holds(parse_quote!([u8]), Some(bytes_expr_type.ok_type.clone()));
+        let bytes_info = BagInfo::from_quote(parse_quote!(
+            Bag<[u8]> + Unbag<&'static [u8]> + Unbag<Vec<u8>>
+        )).unwrap();
 
         // include byte string
         let mut edge = EdgeBuilder::new();
         edge.satisfies_flags(flags);
-        let bytes_contains = bytes_info.contains.clone();
         edge.value(move |mut read: Box<io::Read>| {
             let mut bytes = Vec::new();
             read.read_to_end(&mut bytes)?;
             Ok(Expr::from_quote(
                 LitByteStr::new(&bytes, span),
                 bytes_expr_type.clone(),
-            ).bag_static(bytes_contains.clone()))
+            ).bag_static())
         });
         n.edges.add(Producer(bytes_info), edge);
 
         let str_expr_type = ExprType::of(parse_quote!(&'static str));
-        let str_info = BagInfo::holds(parse_quote!(str), Some(str_expr_type.ok_type.clone()));
+        let str_info = BagInfo::from_quote(parse_quote!(
+            Bag<str> + Unbag<&'static str> + Unbag<String>
+        )).unwrap();
 
         let mut edge = EdgeBuilder::new();
         edge.satisfies_flags(flags);
-        let str_contains = str_info.contains.clone();
         edge.value(move |mut read: Box<io::Read>| {
             let mut string = String::new();
             read.read_to_string(&mut string)?;
             Ok(Expr::from_quote(
                 string,
                 str_expr_type.clone(),
-            ).bag_static(str_contains.clone()))
+            ).bag_static())
         });
         if !is_text(&n.node.0) {
             edge.stop(err_msg("read content is not text"));

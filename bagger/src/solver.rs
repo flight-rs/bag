@@ -1,9 +1,8 @@
 use ::{Node, BagRequest, Flag, nodes};
 use flag::{FlagMap, FlagSet};
-use expr::BagExpr;
+use expr::{BagExpr, BagInfo};
 
 use proc_macro2::Span;
-use syn;
 use failure::Error;
 
 use std::collections::{BTreeMap, VecDeque};
@@ -146,7 +145,7 @@ pub struct Working {
     nodes: Vec<Option<NodeInstance>>,
     new_nodes: Vec<NodeInstance>,
     queue: WorkingQueue,
-    pub target: syn::Type,
+    pub target: BagInfo,
     pub required: FlagSet,
     pub forbidden: FlagSet,
     pub span: Span,
@@ -223,7 +222,7 @@ pub struct NodeInput<'work, N: Node> {
 
 impl<'work, N: Node> NodeInput<'work, N> {
     pub fn arg(&self, name: &str) -> Option<&str> {
-        self.args.get(&Flag::new(name)).map(|v| v.as_str())
+        self.args.get(&Flag::from_str(name)).map(|v| v.as_str())
     }
 }
 
@@ -321,7 +320,7 @@ impl<A: Node, B: Node> EdgeBuilder<A, B> {
     }
 
     pub fn satisfies(&mut self, flag: &str) {
-        self.satisfies_flag(Flag::new(flag))
+        self.satisfies_flag(Flag::from_str(flag))
     }
 
     fn build(mut self, n: B, es: &mut Edges<A>) {

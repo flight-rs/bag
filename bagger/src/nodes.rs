@@ -58,7 +58,7 @@ pub struct EndOnProducer;
 impl Terminal for EndOnProducer {
     fn terminate(&self, w: &Working, n: &NodeInstance) -> bool {
         match n.downcast_ref::<Producer>() {
-            Some(&Producer(ref ty)) => &ty.contains == &w.target,
+            Some(&Producer(ref ty)) => ty.satisfies(&w.target),
             _ => false,
         }
     }

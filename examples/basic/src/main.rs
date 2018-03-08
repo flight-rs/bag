@@ -1,17 +1,11 @@
 #[macro_use]
 extern crate bag_derive;
+#[macro_use]
 extern crate bag;
 
-use bag::{InitTryBag, TryBag};
-
-#[derive(InitTryBag)]
-pub struct TestInit {
-    #[bagger(uri="test.txt")]
-    #[bagger(require="include")]
-    pub test: str,
-}
+use bag::Bag;
 
 fn main() {
-    let bag = TestInit::init();
-    println!("{}", TryBag::<str>::try_get(&bag).unwrap());
+    let bag = bag!(+include "text.txt" => Unbag<String>);
+    println!("{}", Bag::<str>::try_get(&bag).unwrap());
 }

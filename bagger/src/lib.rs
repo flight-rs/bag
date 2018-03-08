@@ -20,15 +20,15 @@ mod builtins;
 pub use solver::{NodeInput, EdgeBuilder, Solution};
 pub use flag::Flag;
 pub use nodes::Node;
+pub use uri::Uri;
 
 use flag::{FlagMap, FlagSet};
-use uri::Uri;
-use syn::Type;
+use expr::BagInfo;
 use proc_macro2::Span;
 
 pub struct BagRequest {
     pub uri: Uri,
-    pub target: Type,
+    pub target: BagInfo,
     pub required: FlagSet,
     pub forbidden: FlagSet,
     pub args: FlagMap<String>,
@@ -36,7 +36,7 @@ pub struct BagRequest {
 }
 
 impl BagRequest {
-    pub fn new(uri: Uri, target: Type) -> BagRequest {
+    pub fn new(uri: Uri, target: BagInfo) -> BagRequest {
         BagRequest {
             uri,
             target,
@@ -53,7 +53,7 @@ impl BagRequest {
     }
 
     pub fn require(&mut self, flag: &str) {
-        self.require_flag(Flag::new(flag))
+        self.require_flag(Flag::from_str(flag))
     }
 
     pub fn forbid_flag(&mut self, flag: Flag) {
@@ -62,7 +62,7 @@ impl BagRequest {
     }
 
     pub fn forbid(&mut self, flag: &str) {
-        self.forbid_flag(Flag::new(flag))
+        self.forbid_flag(Flag::from_str(flag))
     }
 
     pub fn arg_flag(&mut self, flag: Flag, val: &str) {
@@ -70,7 +70,7 @@ impl BagRequest {
     }
 
     pub fn arg(&mut self, flag: &str, val: &str) {
-        self.arg_flag(Flag::new(flag), val)
+        self.arg_flag(Flag::from_str(flag), val)
     }
 }
 
