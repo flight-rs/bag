@@ -5,7 +5,6 @@ use bag::ops::*;
 
 #[macro_use]
 extern crate failure;
-use failure::Error;
 
 pub static STATIC_TEXT: Static<&str> = Static(HELLO);
 pub const HELLO: &str = "Hello, world!";

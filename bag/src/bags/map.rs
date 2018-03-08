@@ -1,5 +1,5 @@
 use ::{Bag, TryBag, Unbag, TryUnbag, fail};
-use spin::Mutex;
+use std::sync::Mutex;
 use std::borrow::Borrow;
 
 enum MapState<A, B, F> {
@@ -15,7 +15,7 @@ enum MapState<A, B, F> {
 
 impl<A, B, F: FnOnce(A) -> B> MapState<A, B, F> {
     fn apply(&mut self) {      
-        // guarentee no mutation once applied!!
+        // guarantee no mutation once applied!!
         if let &mut MapState::Applied { .. } = self { return }
 
         // not yet applied
@@ -57,7 +57,7 @@ impl<A, B, F: FnOnce(A) -> B, T> Bag<T> for LazyMap<A, B, F>
 {
     fn get(&self) -> &T {
         // Applied state will never be mutated, so we can borrow freely 
-        unsafe { &*self.state.lock().get_ptr() }.borrow()
+        unsafe { &*self.state.lock().unwrap().get_ptr() }.borrow()
     }
 }
 impl<A, B, F: FnOnce(A) -> B, T> TryBag<T> for LazyMap<A, B, F> 
@@ -68,7 +68,7 @@ impl<A, B, F: FnOnce(A) -> B, T> TryBag<T> for LazyMap<A, B, F>
     }
 }
 impl<A, B, F: FnOnce(A) -> B> Unbag<B> for LazyMap<A, B, F> {
-    fn unbag(self) -> B { self.state.into_inner().get() }
+    fn unbag(self) -> B { self.state.into_inner().unwrap().get() }
 }
 impl<A, B, F: FnOnce(A) -> B> TryUnbag<B> for LazyMap<A, B, F> {
     fn try_unbag(self) -> Result<B, fail::Error> { Ok(self.unbag()) }
@@ -90,11 +90,11 @@ impl<A, B, F: FnOnce(A) -> Result<B, fail::Error>, T> TryBag<T> for TryLazyMap<A
     where T: ?Sized, B: Borrow<T> 
 {
     fn try_get(&self) -> Result<&T, &fail::Error> {
-        unsafe { &*self.state.lock().get_ptr() }.as_ref().map(Borrow::borrow)
+        unsafe { &*self.state.lock().unwrap().get_ptr() }.as_ref().map(Borrow::borrow)
     }
 }
 impl<A, B, F: FnOnce(A) -> Result<B, fail::Error>> TryUnbag<B> for TryLazyMap<A, B, F> {
     fn try_unbag(self) -> Result<B, fail::Error> {
-        self.state.into_inner().get()
+        self.state.into_inner().unwrap().get()
     }
 }
