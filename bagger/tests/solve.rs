@@ -13,7 +13,11 @@ pub fn solve_static_str() {
     let bggr = Bagger::new();
     let mut req = BagRequest::new(
         Uri::from_str("./tests/hello.txt").unwrap(),
-        BagInfo::from_quote(parse_quote!(Bag<str>)).unwrap());
+        BagInfo::from_quote(parse_quote!(
+            Bag<str> + 
+            TryBag<str> + 
+            Unbag<&'static str> + 
+            Unbag<String>)).unwrap());
     req.require("static");
     req.forbid("include");
 

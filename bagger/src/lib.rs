@@ -26,6 +26,7 @@ pub use expr::BagInfo;
 use flag::{FlagMap, FlagSet};
 use proc_macro2::Span;
 
+#[derive(Debug, Clone)]
 pub struct BagRequest {
     pub uri: Uri,
     pub target: BagInfo,

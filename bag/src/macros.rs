@@ -1,22 +1,24 @@
 #[macro_export]
 macro_rules! bag {
-    ($(+$r:ident)* $(?$f:ident)* $(%$a:ident=($e:expr))* $name:expr => $traits:ty) => {
-        bag_internal!(
-            [target ($traits)]
-            [uri ($name)]
-            $([require ($r)])*
-            $([forbid ($f)])*
-            $([arg ($a) ($e)])*
-        )
-    }
-}
-
-#[macro_export]
-macro_rules! bag_internal {
-    ($([$($v:tt)+])*) => {{
+    (
+        $(+$r:ident)*
+        $(?$f:ident)*
+        $(%$a:ident=($e:expr))*
+        $uri:expr
+        => 
+        $($bag:ident<$contains:ty>$(+)*)+
+    ) => {{
         #[derive(InitBag)]
-        $(#[bagger $($v)*])*
-        struct MkBag;
+        #[bagger(uri=$uri)]
+        #[bagger(require($($r),*))]
+        #[bagger(forbid($($f),*))]
+        $(#[bagger(arg($a=$e))])*
+        struct MkBag(
+            $(
+            #[bagger($bag)]
+            *const $contains
+            ),+
+        );
         
         #[allow(deprecated)]
         <MkBag as ::bag::InitBag>::init()

@@ -35,23 +35,27 @@ impl BagTrait {
         };
     }
 
-    pub fn from_quote(q: syn::Path) -> Result<(BagTrait, Type), Error> {
+    pub fn from_ident(i: &syn::Ident) -> Result<BagTrait, Error> {
         use self::BagTrait::*;
 
-        // TODO: check rest of path
-        let seg = q.segments.into_iter()
-            .last()
-            .ok_or(err_msg("bag trait is missing"))?;
-
-        let tr_name = seg.ident.as_ref();
-        let tr = match tr_name {
+        let tr_name = i.as_ref();
+        Ok(match tr_name {
             "Bag" => Simple,
             "TryBag" => Try,
             "Unbag" => Unbag,
             "TryUnbag" => TryUnbag,
             "AsyncBag" => Async,
             _ => bail!("trait \"{}\" is not a bag", tr_name),
-        };
+        })
+    }
+
+    pub fn from_quote(q: syn::Path) -> Result<(BagTrait, Type), Error> {
+        // TODO: check rest of path
+        let seg = q.segments.into_iter()
+            .last()
+            .ok_or(err_msg("bag trait is missing"))?;
+        let tr = BagTrait::from_ident(&seg.ident)?;
+        let tr_name = seg.ident.as_ref();
 
         let no_params_err = format_err!("\"{}\" must take have a type parameter", tr_name);
         let ty = if let syn::PathArguments::AngleBracketed(args) = seg.arguments {
@@ -69,28 +73,29 @@ impl BagTrait {
 }
 
 impl BagInfo {
+    /// Create a target with no bounds
+    pub fn empty() -> BagInfo {
+        BagInfo { impls: HashSet::new() }
+    }
+
     /// Create a simple bag target of  the form `Bag<A> + Unbag<B>`.
     pub fn simple(bag: Type, unbag: Option<Type>) -> BagInfo {
-        let mut impls = HashSet::new();
-        impls.insert((BagTrait::Simple, bag));
+        let mut info = BagInfo::empty();
+        info.impls.insert((BagTrait::Simple, bag));
         if let Some(unbag) = unbag {
-            impls.insert((BagTrait::Unbag, unbag));
+            info.impls.insert((BagTrait::Unbag, unbag));
         }
-        BagInfo {
-            impls,
-        }
+        info
     }
 
     /// Create a simple bag target of  the form `TryBag<A> + TryUnbag<B>`.
     pub fn simple_try(bag: Type, unbag: Option<Type>) -> BagInfo {
-        let mut impls = HashSet::new();
-        impls.insert((BagTrait::Try, bag));
+        let mut info = BagInfo::empty();
+        info.impls.insert((BagTrait::Try, bag));
         if let Some(unbag) = unbag {
-            impls.insert((BagTrait::TryUnbag, unbag));
+            info.impls.insert((BagTrait::TryUnbag, unbag));
         }
-        BagInfo {
-            impls,
-        }
+        info
     }
 
     fn add_quote_bounds(
@@ -113,9 +118,7 @@ impl BagInfo {
     /// Parse the bag target from rust syntax such as
     /// `Bag<str> + Unbag<String> + Unbag<&'static str>`
     pub fn from_quote(q: Type) -> Result<BagInfo, Error> {
-        let mut info = BagInfo {
-            impls: HashSet::new(),
-        };
+        let mut info = BagInfo::empty();
         match q {
             Type::Path(p) => {
                 info.impls.insert(BagTrait::from_quote(p.path)?);
