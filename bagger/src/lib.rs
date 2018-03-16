@@ -9,9 +9,9 @@ extern crate failure;
 extern crate mime;
 extern crate mime_guess;
 extern crate proc_macro2;
+extern crate easy_uri as uri;
 
 pub mod expr;
-pub mod uri;
 pub mod solver;
 pub mod flag;
 pub mod nodes;

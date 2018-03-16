@@ -2,7 +2,6 @@
 name = "bagger"
 version = "0.0.0"
 authors = ["me@samsartor.com"]
-build = "build.rs"
 
 [dependencies]
 proc-macro2 = "0.2"
@@ -12,6 +11,4 @@ lazy_static = "1.0"
 failure = "0.1"
 mime = "0.2"
 mime_guess = "1.8"
-
-[build-dependencies]
-peg = "0.5"
+easy_uri = { git = "https://github.com/samsartor/easy_uri", version = "0.1" }
