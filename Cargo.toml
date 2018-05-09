@@ -1,8 +1,5 @@
 [workspace]
 members = [
-    "bag",
-    "bag_derive",
-    "bagger",
-    "examples/basic",
+    "grab",
     #"plugins/*",
 ]

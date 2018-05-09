@@ -1,0 +1,11 @@
+//! # Grab
+
+////////////////////////////////////////////////////////////////////////////////
+
+#[macro_use]
+extern crate grab_derive;
+pub use grab_derive::*;
+
+pub mod macros;
+pub(crate) mod internal;
+

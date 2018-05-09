@@ -1,8 +1,0 @@
-[package]
-name = "basic_example"
-version = "0.0.0"
-authors = ["me@samsartor.com"]
-
-[dependencies]
-bag = { path = "../../bag" }
-bag_derive = { path = "../../bag_derive" }

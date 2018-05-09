@@ -1,7 +1,7 @@
 [package]
-name = "bag"
+name = "grab"
 version = "0.0.0"
 authors = ["me@samsartor.com"]
 
 [dependencies]
-failure = "0.1"
+"grab_derive" = { path = "../grab_derive" }
