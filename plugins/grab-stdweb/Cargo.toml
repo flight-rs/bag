@@ -1,0 +1,8 @@
+[package]
+name = "grab-stdweb"
+version = "0.0.0"
+authors = ["Sam Sartor <me@samsartor.com>"]
+
+[dependencies]
+grabber = { path = "../../grabber" }
+quote = "0.5"

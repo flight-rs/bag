@@ -1,5 +1,8 @@
 [workspace]
 members = [
     "grab",
-    #"plugins/*",
+    "grab_derive",
+    "grabber_core",
+    "grabber",
+    # "plugins/*",
 ]

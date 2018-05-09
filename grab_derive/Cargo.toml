@@ -11,4 +11,5 @@ proc-macro = true
 proc-macro2 = "0.2"
 quote = "0.4"
 syn = { version = "0.12", features = ["visit", "extra-traits"] }
-lazy_static = "1.0.0"
+lazy_static = "^1.0"
+grabber_core = { path = "../grabber_core" }
