@@ -21,7 +21,7 @@ pub enum BagTrait {
 }
 
 impl BagTrait {
-    /// Converts this bag trait to the equivalent failable bag. For example, 
+    /// Converts this bag trait to the equivalent failable bag. For example,
     /// `Bag` is converted into `TryBag`.
     pub fn failable(&mut self) {
         use self::BagTrait::*;
@@ -101,8 +101,8 @@ impl BagInfo {
     fn add_quote_bounds(
         &mut self,
         q: Punctuated<syn::TypeParamBound, token::Add>,
-    ) 
-        -> Result<(), Error> 
+    )
+        -> Result<(), Error>
     {
         for b in q {
             match b {
@@ -209,6 +209,12 @@ pub struct BagExpr {
     pub returns: Type,
 }
 
+impl BagExpr {
+    pub fn to_expr(self) -> Expr {
+        Expr::from_quote(self.expr, ExprType::of(self.returns))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExprType {
     pub ok_type: Type,
@@ -261,10 +267,10 @@ impl Expr {
     }
 
     pub fn bag_static(self) -> BagExpr {
-        let FlatExpr { 
+        let FlatExpr {
             expr,
-            returns: ExprType { 
-                ok_type, 
+            returns: ExprType {
+                ok_type,
                 is_result,
         } } = self.flatten();
 

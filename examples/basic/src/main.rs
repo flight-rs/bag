@@ -3,9 +3,9 @@ extern crate bag_derive;
 #[macro_use]
 extern crate bag;
 
-use bag::Bag;
+use bag::Unbag;
 
 fn main() {
-    let bag = bag!(+include ?stuff %content=("text/plain") "test.txt" => Bag<str> + TryBag<str> + Unbag<String>);
-    println!("{}", Bag::<str>::try_get(&bag).unwrap());
+    let value = bag!("test.txt" => Bag<Vec<u8>>).unbag();
+    println!("{:?}", value);
 }

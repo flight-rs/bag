@@ -62,7 +62,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
         // append edge
         let mime = get_mime(&n);
-        n.edges.add(LocalRead(mime), edge);      
+        n.edges.add(LocalRead(mime), edge);
     });
 
     // LocalPath -> Producer<[u8]>, Producer<str>
@@ -73,7 +73,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
         let bytes_expr_type = ExprType::of(parse_quote!(&'static [u8]));
         let bytes_info = BagInfo::from_quote(parse_quote!(
-            Bag<[u8]> + Unbag<&'static [u8]> + Unbag<Vec<u8>>
+            Bag<[u8]> + Unbag<&'static [u8]>
         )).unwrap();
 
         let mut bytes_edge = EdgeBuilder::new();
@@ -81,7 +81,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
         let str_expr_type = ExprType::of(parse_quote!(&'static str));
         let str_info = BagInfo::from_quote(parse_quote!(
-            Bag<str> + Unbag<&'static str> + Unbag<String>
+            Bag<str> + Unbag<&'static str>
         )).unwrap();
 
         let mut str_edge = EdgeBuilder::new();
@@ -119,7 +119,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
         let bytes_expr_type = ExprType::of(parse_quote!(&'static [u8]));
         let bytes_info = BagInfo::from_quote(parse_quote!(
-            Bag<[u8]> + Unbag<&'static [u8]> + Unbag<Vec<u8>>
+            Bag<[u8]> + Unbag<&'static [u8]>
         )).unwrap();
 
         // include byte string
@@ -137,7 +137,7 @@ pub fn register_builtins(bggr: &mut Bagger) {
 
         let str_expr_type = ExprType::of(parse_quote!(&'static str));
         let str_info = BagInfo::from_quote(parse_quote!(
-            Bag<str> + Unbag<&'static str> + Unbag<String>
+            Bag<str> + Unbag<&'static str>
         )).unwrap();
 
         let mut edge = EdgeBuilder::new();
@@ -154,5 +154,62 @@ pub fn register_builtins(bggr: &mut Bagger) {
             edge.stop(err_msg("read content is not text"));
         }
         n.edges.add(Producer(str_info), edge);
+    });
+
+    // Producer<str> -> Producer<String>
+    bggr.transform(move |mut n: NodeInput<Producer>| {
+        use syn::{Ident, Type};
+
+        let slice_info = BagInfo::from_quote(parse_quote!(Bag<str>)).unwrap();
+        let owned_ty: Type = parse_quote!(String);
+        let owned_info = BagInfo::simple(owned_ty.clone(), Some(owned_ty.clone()));
+        let chars = Ident::from("chars");
+
+        // include byte string
+        if n.node.0.satisfies(&slice_info) {
+            let mut edge = EdgeBuilder::new();
+            edge.value(move |chars_bag: BagExpr| {
+                let mut expr = Expr::from_quote(
+                    quote! { ::bag::Bag::<str>::get(&#chars).to_owned() },
+                    ExprType::of(owned_ty.clone()),
+                );
+                expr.inputs.push((chars, chars_bag.to_expr()));
+                Ok(expr.bag_lazy_map())
+            });
+            n.edges.add(Producer(owned_info), edge);
+        }
+    });
+
+     // Producer<[T]> -> Producer<Vec<T>>
+    bggr.transform(move |mut n: NodeInput<Producer>| {
+        use syn::{Ident, Type};
+        use ::expr::BagTrait;
+
+        for (tr, slice_ty) in &n.node.0.impls {
+            match tr {
+                BagTrait::Simple => (),
+                _ => continue,
+            }
+
+            let ety = match slice_ty {
+                Type::Slice(ref t) => (&*t.elem).clone(),
+                _ => continue,
+            };
+
+            let vec_ty: Type = parse_quote!(Vec<#ety>);
+            let vec_info = BagInfo::simple(vec_ty.clone(), Some(vec_ty.clone()));
+            let elems = Ident::from("elems");
+
+            let mut edge = EdgeBuilder::new();
+            edge.value(move |elems_bag: BagExpr| {
+                let mut expr = Expr::from_quote(
+                    quote! { ::bag::Bag::<[_]>::get(&#elems).to_owned() },
+                    ExprType::of(vec_ty.clone()),
+                );
+                expr.inputs.push((elems, elems_bag.to_expr()));
+                Ok(expr.bag_lazy_map())
+            });
+            n.edges.add(Producer(vec_info), edge);
+        }
     });
 }

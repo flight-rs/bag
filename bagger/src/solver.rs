@@ -11,7 +11,7 @@ use std::cmp::{PartialOrd, Ord, Ordering};
 use std::marker::PhantomData;
 
 /// Priority for node exploration.
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct EdgeOrder {
     /// Most significant property: is the edge an active route?
     pub active: bool,
@@ -192,7 +192,7 @@ impl<N, F> TransformInstance for FnTransform<N, F>
             Some(m) => m,
             None => return,
         };
-        
+
         let node = NodeInput::<N> {
             span: working.span,
             args: &working.args,
